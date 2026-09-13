@@ -1,0 +1,15 @@
+VBoxContainer
+TextureProgressBar
+ProgressBar
+Button
+TileMapDual
+TileMapLayer
+Node2D
+ItemList
+VideoStreamPlayer
+Panel
+Sprite2D
+Control
+AnimatedSprite2D
+CanvasLayer
+Label

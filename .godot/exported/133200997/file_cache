@@ -1,0 +1,5 @@
+res://addons/TileMapDual/ghost_material.tres::c2ff3ce64964a2fddbdbf768a13add78::1788757978::res://.godot/exported/133200997/export-b09d823a04a4f3f02ec76e2f07487086-ghost_material.res
+res://tscns/GameScene.tscn::7272133fc3c731f2a0a6fe546a37eef9::1789047624::res://.godot/exported/133200997/export-037bbbca9700ee09a34402f18165de34-GameScene.scn
+res://tscns/Hero.tscn::13d9e98508dcae52e1199a4b8ae614ad::1789046365::res://.godot/exported/133200997/export-8408976a0ff5042ad44e64b0120cdbb0-Hero.scn
+res://tscns/Item.tscn::ba00dc12ff2bc4bd603a30dfb17b856c::1789031898::res://.godot/exported/133200997/export-f98ecee501e2eb7b8ff78811604e59b8-Item.scn
+res://tscns/Mob.tscn::ab0bec1e4f013701bd89ecbe886b55cc::1789046969::res://.godot/exported/133200997/export-3af588608d7b1995d88d7a6ad7d0cbe9-Mob.scn

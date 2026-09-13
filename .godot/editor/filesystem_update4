@@ -1,0 +1,7 @@
+res://tscns/Mob.tscn
+res://resources/mobs/rat_frames.tres
+res://addons/TileMapDual/tile_map_dual.gd
+res://scripts/actors/heros/Talent.gd
+res://scripts/actors/heros/Hero.gd
+res://tscns/Item.tscn
+res://scripts/actors/mobs/npcs/Char.gd
