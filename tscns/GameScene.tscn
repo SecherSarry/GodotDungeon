@@ -576,7 +576,15 @@ tile_set = SubResource("TileSet_av3mj")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1157379310]
 
-[node name="Label" type="Label" parent="CanvasLayer" unique_id=723348547]
+[node name="BuffList" type="ItemList" parent="CanvasLayer" unique_id=1398873984]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -150.0
+offset_bottom = 300.0
+grow_horizontal = 0
+
+[node name="StatusLabel" type="Label" parent="CanvasLayer" unique_id=723348547]
 offset_right = 40.0
 offset_bottom = 23.0
 label_settings = SubResource("LabelSettings_wkb31")
@@ -600,7 +608,8 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -400.0
-offset_top = -200.0
+offset_top = -300.0
+offset_bottom = -3.0517578e-05
 grow_horizontal = 0
 grow_vertical = 0
 
@@ -608,19 +617,26 @@ grow_vertical = 0
 layout_mode = 0
 offset_left = 10.0
 offset_top = 10.0
-offset_right = 80.0
-offset_bottom = 190.0
+offset_right = 70.0
+offset_bottom = 290.0
 
 [node name="ItemList" type="ItemList" parent="CanvasLayer/InventoryUI/Panel" unique_id=140639859]
 layout_mode = 0
-offset_left = 90.0
+offset_left = 80.0
+offset_top = 10.0
+offset_right = 230.0
+offset_bottom = 290.0
+
+[node name="BelongingsList" type="ItemList" parent="CanvasLayer/InventoryUI/Panel" unique_id=2014455968]
+layout_mode = 0
+offset_left = 240.0
 offset_top = 10.0
 offset_right = 390.0
-offset_bottom = 190.0
+offset_bottom = 290.0
 
 [node name="Button" type="Button" parent="CanvasLayer" unique_id=1579450939]
-offset_left = 1801.0
-offset_top = 808.0
-offset_right = 1905.0
-offset_bottom = 867.0
+offset_left = 1780.0
+offset_top = 700.0
+offset_right = 1900.0
+offset_bottom = 760.0
 text = "缩放"

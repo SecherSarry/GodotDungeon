@@ -1,18 +1,23 @@
 extends Item
 class_name Potion
 
-const DUR_DRINK := 1.0   # 喝药耗时
+const TIME_TO_DRINK := 1.0   # 喝药耗时
+
+# 药剂天然可堆叠：开局发 n 瓶、或日后捡到同名药，都该在背包里合成一格。
+# 必须放在 _init 而不能用 _ready：Item 是 Resource，没有 _ready 回调（同 ClothArmor 注释）。
+# 子类覆写 _init 时必须调 super()，否则本函数整个不执行（见 Armor 注释）。
+func _init(lvl: int = 0) -> void:
+	super(lvl)
+	stackable = true
 
 func actions(hero: Hero):
 	return super(hero) + ["饮用"]
 
-func execute(hero: Hero, action: String) -> void:
+func execute(hero: Hero, action: String = default_action) -> void:
+	await super(hero, action)
 	if action == "饮用":
+		hero.spend(TIME_TO_DRINK)
 		drink(hero)
-		consume()
-		await end_action(hero, DUR_DRINK)
-	else:
-		await super(hero, action)   # 放下/扔出由基类处理
 
 func drink(curUser: Char):
 	pass

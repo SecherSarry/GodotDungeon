@@ -1,8 +1,0 @@
-[gd_resource type="Resource" script_class="SpawnTable" format=3]
-
-[ext_resource type="Script" uid="uid://dq7qsumxy84ix" path="res://scripts/actors/mobs/SpawnTable.gd" id="1_st"]
-[ext_resource type="Resource" path="res://resources/mobs/rat.tres" id="2_rat"]
-
-[resource]
-script = ExtResource("1_st")
-entries = [ExtResource("2_rat")]

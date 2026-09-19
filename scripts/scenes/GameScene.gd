@@ -8,6 +8,7 @@ extends Node2D
 @onready var camera = $Camera2D
 @onready var inventory_ui = $CanvasLayer/InventoryUI  # 背包UI
 @onready var zoom_in_button = $CanvasLayer/Button      # 缩放放大按钮
+@onready var buff_list = $CanvasLayer/BuffList          # 身上 buff 一览
 
 # ---------- 图块映射 ----------
 const TILE_CHASM = Vector2i(8, 1)
@@ -28,15 +29,17 @@ var _walk_target: Vector2i = Vector2i(-1, -1)
 var _walk_seen: Dictionary = {}   # 起步时已可见的怪（实例 id）→ 只对"新看到"的怪暂停
 var _walk_monster: Char = null    # 敌人目标：非空则持续追击并攻击（目标格已探索时才设）
 
-# ---------- 地格选取 / 投掷 ----------
+# ---------- 地格选取 ----------
 var _selector: TileSelector = null   # 通用选取器（投掷/施法等复用）
-var _throw_index: int = -1           # 待投掷的背包物品下标
+var _preview: Callable = Callable()  # 当前选格的预览回调（随 select_cell 传入，见该函数）
 
-# 投掷流程结束通知（已落地=true / 被取消=false）。投掷要点格子、跨帧，
-# 无法同步返回，故用一次性信号让 Item.execute 的 await 一直等到真正结束，
-# 再由 Item 统一收尾（记账 + 推进回合），保证"一次玩家动作恰好推进一次回合"。
-signal throw_resolved(acted: bool)
-var _throw_pending := false
+# select_cell 的结果通道：选格要点鼠标、跨帧，无法同步返回，故用一次性信号把
+# "确认的格子"或"取消"（(-1,-1)）交回 await 方，由调用方自行决定拿到格子做什么。
+signal _selection_resolved(cell: Vector2i)
+
+# ---------- 背包选取 ----------
+# select_item 的结果通道：同上，点选跨帧。交回"选中的物品"或取消（null）。
+signal _item_selection_resolved(item: Item)
 
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 10.0
@@ -58,8 +61,9 @@ func _ready():
 	InputHub.zoom_requested.connect(_on_zoom_requested)
 	
 	Bag.inventory_updated.connect(_on_inventory_updated)
-	Bag.init_starting_inventory()   # 新游戏开局给初始背包（幂等：先清后灌）
-	inventory_ui.game_scene = self
+	inventory_ui.game_scene = self   # 必须先于任何会触发 inventory_updated 的操作，否则 refresh 拿到空 game_scene
+	inventory_ui.item_chosen.connect(_on_item_chosen)
+	inventory_ui.selection_cancelled.connect(_on_item_selection_cancelled)
 	zoom_in_button.pressed.connect(_on_zoom_in_button_pressed)   # 缩放放大按钮
 
 
@@ -70,12 +74,16 @@ func _ready():
 	_selector.scene = self
 	add_child(_selector)
 	_selector.cursor_changed.connect(_on_selector_cursor_changed)
+	_selector.confirmed.connect(_on_cell_confirmed)
 	_selector.cancelled.connect(_on_selector_cancelled)
 
 	render_hero()
 	render_monsters()   # 按 MapManager 决策的怪物格渲染怪物节点
 	render_items()   # 按 MapManager 决策的物品清单渲染地面物品
-	
+
+	# 初始背包：放在 hero 进树之后，使 refresh 读到已初始化的 hero（幂等：先清后灌）
+	Bag.init_starting_inventory()
+
 	camera.global_position = hero.global_position
 	camera.zoom = Vector2.ONE
 	camera.position_smoothing_enabled = true
@@ -91,9 +99,44 @@ func _process(delta):
 	text += "STR: " + str(hero.STR) + "\n"
 	text += "lvl: " + str(hero.lvl) + "\n"
 	text += "exp: " + str(hero.exp)+ "/" + str(hero.max_exp()) + "\n"
-	text += "当前武器: " + hero.weapon.item_name + "(" + str(hero.weapon.min()) + "-" + str(hero.weapon.max()) + ")\n"
+	text += "饥饿度: " + str(hero.get_buff(Hunger).hunger())+ "/450\n"
+	if hero.weapon != null:
+		text += "当前武器: " + hero.weapon.item_name + "(" + str(hero.weapon.min()) + "-" + str(hero.weapon.max()) + ")\n"
+	else:
+		text += "当前武器: 无\n"
+	if hero.armor != null:
+		text += "当前护甲: " + hero.armor.item_name + "(" + str(hero.armor.dr_min()) + "-" + str(hero.armor.dr_max()) + ")\n"
+	else:
+		text += "当前护甲: 无\n"
 	text += "精准: " + str(hero.attack_skill) + " 闪避：" + str(hero.defense_skill) + "\n"
-	$CanvasLayer/Label.text = text
+	$CanvasLayer/StatusLabel.text = text
+
+	_refresh_buff_list()
+
+# ---------- 身上 buff 一览 ----------
+var _buff_cache: Array = []
+
+func _refresh_buff_list():
+	var labels: Array = []
+	if hero != null:
+		for buff in hero.all_buffs():
+			labels.append(_buff_label(buff))
+	if labels == _buff_cache:
+		return   # 无变化不重建：避免每帧 clear/add_item 的无谓分配与列表闪烁
+	buff_list.clear()
+	for l in labels:
+		buff_list.add_item(l)
+	_buff_cache = labels
+
+# Buff 没有名字字段，取脚本的全局类名（如 "Haste"）当显示名
+func _buff_label(buff: Actor) -> String:
+	var script = buff.get_script()
+	var shown: String = script.get_global_name() if script != null else ""
+	if shown == "":
+		shown = "Buff"
+	if buff is Hunger:
+		return shown + "  " + str(buff.partical_damage)
+	return shown + "  " + ("%.1f" % (buff.next_action_time - hero.next_action_time))
 
 # ---------- 地图绘制 ----------
 func init_layers():
@@ -190,7 +233,7 @@ func refresh_foglayer():
 		for x in MapManager.MAP_WIDTH:
 			var pos = Vector2i(x, y)
 			if MapManager.explored[y][x]:
-				if MapManager.visiblity[y][x]:
+				if hero.FOV[y][x]:
 					fog_layer.set_cell(pos, -1)
 				else:
 					fog_layer.set_cell(pos, 0, TILE_FOG_EXPLORED)
@@ -198,10 +241,23 @@ func refresh_foglayer():
 				fog_layer.set_cell(pos, 0, TILE_FOG_UNSEEN)
 
 func update_fov():
-	MapManager.update_fov(hero.grid_pos)
+	hero.fieldofview()                  # 视野由英雄自己按 view_distance 算，写入 hero.FOV
+	_reveal_by_mind_vision()            # 灵视在英雄 FOV 之上额外点亮（尚未落账）
+	MapManager.record_sight(hero.FOV)   # 落账进已探索：唯一写入点，故须排在灵视之后
 	refresh_foglayer()
 	update_monsters_visibility()
 	update_items_visibility()
+
+# 灵视：把每个生物及其九宫格补进英雄视野（fieldofview 每次先清空 FOV 再重算，
+# 故 buff 一掉，这些格自然恢复黑暗；explored 已记下，地形仍留在迷雾记忆中）。
+func _reveal_by_mind_vision():
+	if not hero.has_buff(MindVision):
+		return
+	var cells := []
+	for mob in TurnManager.monsters:
+		if is_instance_valid(mob):
+			cells.append(mob.grid_pos)
+	hero.reveal_around(cells, MindVision.RADIUS)
 	
 func update_monsters_visibility():
 	for mob in TurnManager.monsters:
@@ -209,7 +265,7 @@ func update_monsters_visibility():
 			var cell = mob.grid_pos
 			# 检查坐标是否在有效范围内
 			if cell.x >= 0 and cell.x < MapManager.MAP_WIDTH and cell.y >= 0 and cell.y < MapManager.MAP_HEIGHT:
-				mob.visible = MapManager.visiblity[cell.y][cell.x]
+				mob.visible = hero.FOV[cell.y][cell.x]
 			else:
 				mob.visible = false
 				
@@ -218,7 +274,7 @@ func update_items_visibility():
 		if is_instance_valid(item_node):
 			var cell = item_node.grid_pos
 			if cell.x >= 0 and cell.x < MapManager.MAP_WIDTH and cell.y >= 0 and cell.y < MapManager.MAP_HEIGHT:
-				item_node.visible = MapManager.visiblity[cell.y][cell.x]
+				item_node.visible = hero.FOV[cell.y][cell.x]
 			else:
 				item_node.visible = false
 				
@@ -232,13 +288,12 @@ func render_hero():
 	hero.play_anim("idle")   # 生成即静止动画
 	TurnManager.register_actor(hero)
 
-# ---------- 渲染怪物：按 MapManager.monster_placements 实例化怪物节点 ----------
+# ---------- 渲染怪物：按 MapManager.monster_cells 实例化怪物节点 ----------
 func render_monsters():
-	for placement in MapManager.monster_placements:
-		var mob = preload("res://tscns/Mob.tscn").instantiate()
-		mob.data = placement["data"]   # 数值/外观在 _ready 前注入
-		mob.grid_pos = placement["cell"]
-		mob.position = bedrock_layer.map_to_local(placement["cell"])
+	for cell in MapManager.monster_cells:
+		var mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
+		mob.grid_pos = cell
+		mob.position = bedrock_layer.map_to_local(cell)
 		mob.game_scene = self
 		mob.z_index = CHAR_Z   # 角色压在地面物品之上
 		add_child(mob)
@@ -291,6 +346,8 @@ func zoom_map(factor: float):
 func _on_move_requested(direction: Vector2i):
 	if _selector.active:
 		return   # 选取模式中不响应方向移动
+	if inventory_ui.selecting:
+		return   # 选物模式中同理
 	if auto_walking:
 		_stop_auto_walk()   # 手动移动打断自动行走，避免两条驱动同时推进
 		return
@@ -304,6 +361,8 @@ func _on_move_requested(direction: Vector2i):
 func _on_map_click():
 	if _selector.active:
 		return   # 选取模式自行消费点击
+	if inventory_ui.selecting:
+		return   # 选物模式中地图点击一律忽略，避免一边等选取一边把回合推走
 	if hero_dead:
 		return
 	var cell = get_cell_from_mouse_pos()
@@ -327,8 +386,8 @@ func _on_map_click():
 	elif chebyshev == 1:
 		try_hero_action(cell)          # 相邻：攻击或移动
 	else:
-		var monster = TurnManager.get_monster_at(cell)
-		if monster != null and chebyshev <= hero.weapon.RCH:
+		var enemy = TurnManager.get_monster_at(cell)
+		if hero.can_attack(enemy):
 			try_hero_action(cell)      # 射程内的怪：直接攻击
 		else:
 			_start_auto_walk(cell)     # 远处（无论有无怪）：寻路过去
@@ -339,21 +398,20 @@ func _on_zoom_requested(factor: float):
 # 缩放放大按钮：按下即放大 0.2
 func _on_zoom_in_button_pressed():
 	zoom_map(InputHub.ZOOM_STEP)
-	hero.weapon.do_unequip(hero)
 
 # ---------- 玩家动作：判定合法性后把行动交给 hero（角色自管动画），GameScene 只负责编排与回合推进 ----------
 func try_hero_action(target_cell: Vector2i):
 	if not is_player_turn():
 		return
+		
 	var offset = target_cell - hero.grid_pos
 
 	is_animating = true
 	var acted = false
 	if offset == Vector2i.ZERO:
 		# 脚下：拾取优先；无物品时再看是否站在入口/出口上换层
-		acted = try_collect(hero)
-		if acted:
-			hero.spend_time(Char.DUR_PICKUP)
+		if try_collect(hero):
+			acted = true
 		elif hero.grid_pos == MapManager.hero_spawn:
 			is_animating = false
 			_change_floor(-1)   # 站在入口 → 上一层
@@ -363,18 +421,18 @@ func try_hero_action(target_cell: Vector2i):
 			_change_floor(1)    # 站在出口 → 下一层
 			return
 	else:
-		var monster = TurnManager.get_monster_at(target_cell)
-		if monster != null and max(abs(offset.x), abs(offset.y)) <= hero.weapon.RCH:
-			await hero.attack(monster)
+		var enemy = TurnManager.get_monster_at(target_cell)
+		if hero.can_attack(enemy):
+			await hero.attack(enemy)
 			acted = true
 		elif max(abs(offset.x), abs(offset.y)) == 1:
 			acted = hero.move_step(target_cell)   # 同步即时提交 + 启动自滑
-			# 不在此单独等待：下方 advance 末尾会等英雄与怪物一起滑完（并行、无停顿）
+			# 不在此单独等待：下方 next 末尾会等英雄与怪物一起滑完（并行、无停顿）
 	is_animating = false
 
 	if acted:
 		update_fov()
-		await TurnManager.advance()
+		await TurnManager.next()
 
 # ---------- 换层 ----------
 # 站入口 → floor_delta=-1（上一层）；站出口 → +1（下一层）。到顶则拒绝。
@@ -397,7 +455,7 @@ func _capture_entities() -> Dictionary:
 	var monsters := []
 	for mob in TurnManager.monsters:
 		if is_instance_valid(mob):
-			monsters.append({ "cell": mob.grid_pos, "hp": mob.HP, "max_hp": mob.maxHP, "data": mob.data })
+			monsters.append({ "cell": mob.grid_pos, "hp": mob.HP, "max_hp": mob.maxHP })
 	var items := []
 	for node in items_on_floor:
 		if is_instance_valid(node):
@@ -423,9 +481,9 @@ func _rebuild_level(landing: Vector2i, restored: bool) -> void:
 	water_layer.clear()
 	fog_layer.clear()
 	init_layers()
-	# 英雄摆到落点，并清空时间轴（玩家先动）
+	# 英雄摆到落点，并清空时间轴（玩家先动）；buff 随宿主一同归零，否则换层后再也轮不到
 	hero.snap_to(landing)
-	hero.next_action_time = 0.0
+	hero.reset_timeline()
 	if restored:
 		var ents = MapManager.get_floor_entities(MapManager.current_depth)
 		_render_monsters_from(ents.get("monsters", []))
@@ -437,11 +495,10 @@ func _rebuild_level(landing: Vector2i, restored: bool) -> void:
 	update_fov()
 	inventory_ui.refresh()
 
-# 从快照重建怪（位置 + 血量 + 怪种）；HP 在 add_child 之后设，避免被 _ready 的初始值覆盖
+# 从快照重建怪（位置 + 血量）；HP 在 add_child 之后设，避免被 _ready 的初始值覆盖
 func _render_monsters_from(snapshot: Array) -> void:
 	for m in snapshot:
 		var mob = preload("res://tscns/Mob.tscn").instantiate()
-		mob.data = m["data"]   # 先注入怪种，_ready 才知道配哪些数值/外观
 		mob.grid_pos = m["cell"]
 		mob.position = bedrock_layer.map_to_local(m["cell"])
 		mob.game_scene = self
@@ -456,7 +513,7 @@ func _render_items_from(snapshot: Array) -> void:
 		create_floor_item(e["item"], e["cell"])
 
 # ---------- 自动行走：沿已探索最短路径逐格走近；途中看到新出现的怪立即暂停 ----------
-# 单一驱动循环：每步重算路径（怪会移动，旧路径随时失效），经主角 move_step 与 TurnManager.advance 走一回合。
+# 单一驱动循环：每步重算路径（怪会移动，旧路径随时失效），经主角 move_step 与 TurnManager.next 走一回合。
 # 到达目标格后按目标内容做动作：有物品→拾取、是出入口→换层；目标是敌人→持续追击并攻击至死。
 # 以上"到达/追击"行为仅在目标格已探索时生效（看不见的暗格只走过去，不做任何动作）。
 func _start_auto_walk(cell: Vector2i):
@@ -483,10 +540,10 @@ func _auto_walk_loop() -> void:
 			if not is_instance_valid(_walk_monster) or not _walk_monster.is_alive():
 				break
 			_walk_target = _walk_monster.grid_pos   # 怪会移动：每步重定位
-			if max(abs(hero.grid_pos.x - _walk_target.x), abs(hero.grid_pos.y - _walk_target.y)) <= hero.weapon.RCH:
+			if max(abs(hero.grid_pos.x - _walk_target.x), abs(hero.grid_pos.y - _walk_target.y)) <= hero.reach():
 				await hero.attack(_walk_monster)
 				update_fov()
-				await TurnManager.advance()
+				await TurnManager.next()
 				continue
 		elif hero.grid_pos == _walk_target:
 			# 到达目标格：物品→拾取、出入口→换层。目标未探索则不生效（看不见的格子不做到达动作）
@@ -506,8 +563,8 @@ func _auto_walk_loop() -> void:
 		if not hero.move_step(next_step):
 			break
 		update_fov()
-		# 英雄起滑后立刻推进回合：怪物同帧并行起滑，advance 末尾统一等一次滑动收尾
-		await TurnManager.advance()
+		# 英雄起滑后立刻推进回合：怪物同帧并行起滑，next 末尾统一等一次滑动收尾
+		await TurnManager.next()
 	auto_walking = false
 	_walk_target = Vector2i(-1, -1)
 	_walk_monster = null
@@ -521,7 +578,7 @@ func _visible_monster_ids() -> Dictionary:
 			continue
 		var c = mob.grid_pos
 		if c.x >= 0 and c.x < MapManager.MAP_WIDTH and c.y >= 0 and c.y < MapManager.MAP_HEIGHT \
-				and MapManager.visiblity[c.y][c.x]:
+				and hero.FOV[c.y][c.x]:
 			ids[mob.get_instance_id()] = true
 	return ids
 
@@ -549,7 +606,7 @@ func render_items():
 func create_floor_item(item_data: Item, cell: Vector2i):
 	for item_node in items_on_floor:
 		if item_node.grid_pos == cell and item_node.item_data.item_name == item_data.item_name:
-			item_node.item_data.quantity += item_data.quantity
+			item_node.item_data.item_quantity += item_data.item_quantity
 			return
 	var item_node = preload("res://tscns/Item.tscn").instantiate()
 	item_node.grid_pos = cell
@@ -569,33 +626,45 @@ func try_collect(actor: Char) -> bool:
 	for i in range(items_on_floor.size() - 1, -1, -1):
 		var item_node = items_on_floor[i]
 		if item_node.grid_pos == actor.grid_pos:
-			if item_node.collect(actor):
+			if item_node.interact(actor):
 				items_on_floor.remove_at(i)
 				item_node.queue_free()
 				return true
 	print("此处没有物品或背包已满")
 	return false
 
-# 丢弃 = 投掷：进入地格选取，选一个格子丢过去（可投向未探索区域；撞墙则落在墙前）。
-# 纯摆位服务：只取出→飞行→落地→刷可见性；扣背包的"消耗"与记账/推进回合由 Item 收尾。
-# 因选格跨帧，本函数 await 到 throw_resolved 才返回；返回是否真的扔出去了（取消=false）。
-func drop_item_from_inventory(index: int) -> bool:
-	if auto_walking:
-		_stop_auto_walk()
-	if not is_player_turn():
-		return false
-	if index < 0 or index >= Bag.get_inventory().size():
-		return false
-	_throw_index = index
-	_throw_pending = true
-	_selector.begin(hero.grid_pos, _on_throw_target_chosen)
-	_refresh_throw_preview(_selector.cursor)
-	var acted: bool = await throw_resolved
-	return acted
+# ---------- 通用选格 ----------
+# 进入选取模式，等玩家左键确认或右键/Esc 取消，返回选中格；取消返回 (-1,-1)。
+# 选格要点鼠标、跨帧，故本函数是协程，调用方必须 await。
+# preview 是"预览种类"标识：按它挂上对应的预览函数，光标每次移动即重画预览。
+# 调用方（如 Item.do_throw）只需传种类名，不必知道预览怎么实现；以后施法、指定目标
+# 各加一个种类与对应的 _refresh_xxx_preview 即可复用，本函数主体不必再改。
+func select_cell(origin: Vector2i = hero.grid_pos, preview: String = "") -> Vector2i:
+	if _selector.active:
+		_selector.cancel()   # 关掉可能开着的上一次选取
+	match preview:
+		"throw":
+			_preview = _refresh_throw_preview
+		_:
+			_preview = Callable()   # 无预览：只有跟随鼠标的光标框
+	_selector.begin(origin, Callable())   # 确认/取消统一走 confirmed/cancelled 信号
+	if _preview.is_valid():
+		_preview.call(_selector.cursor)   # 初始格先预览一次，免得要动一下鼠标才出框
+	var cell: Vector2i = await _selection_resolved
+	return cell
 
-# 光标移动：更新落点预览与"可否扔到"（可扔到 → 光标变绿）
+func _on_cell_confirmed(cell: Vector2i) -> void:
+	_preview = Callable()
+	_selection_resolved.emit(cell)
+
+func _on_selector_cancelled() -> void:
+	_preview = Callable()
+	_selection_resolved.emit(Vector2i(-1, -1))   # 取消：交回 (-1,-1)，不记时、不推进回合
+
+# 光标移动：转交给当前预览回调（无预览则只更新光标框本身）
 func _on_selector_cursor_changed(cell: Vector2i) -> void:
-	_refresh_throw_preview(cell)
+	if _preview.is_valid():
+		_preview.call(cell)
 
 # 落点可达 = 沿直线无遮挡（= 实际落点即光标格）→ 光标绿；被墙挡 → 黄。
 # 未探索格一律不显绿（看不见的暗格不冒充"已确定落点"）：落点在未探索处则不画绿框，
@@ -605,36 +674,41 @@ func _refresh_throw_preview(cell: Vector2i) -> void:
 	_selector.set_secondary(landing if MapManager.is_explored(landing) else Vector2i(-1, -1))
 	_selector.set_cursor_valid(landing == cell and MapManager.is_explored(cell))
 
-func _on_selector_cancelled() -> void:
-	_throw_index = -1
-	if _throw_pending:
-		_throw_pending = false
-		throw_resolved.emit(false)   # 取消：通知等待方"没扔成"，不记时、不推进回合
+# ---------- 通用选物 ----------
+# 进入背包选取模式，等玩家点选一件物品后返回；取消返回 null。
+# 与 select_cell 同构：点选跨帧，无法同步返回，故本函数是协程，调用方必须 await。
+# 只认背包（belongings 是装备槽，不属于"背包内的一件物品"）。取消走全局 Esc/右键。
+# 调用方（如将来"用药前先选一瓶"）不必知道背包 UI 怎么搭，只 await 拿结果。
+func select_item() -> Item:
+	if inventory_ui.selecting:
+		inventory_ui.cancel_select()   # 关掉可能开着的上一次选取
+	inventory_ui.begin_select()
+	var item: Item = await _item_selection_resolved
+	return item
 
-func _on_throw_target_chosen(cell: Vector2i) -> void:
-	var index = _throw_index
-	_throw_index = -1
-	_do_throw(index, cell)
+func _on_item_chosen(item: Item) -> void:
+	_item_selection_resolved.emit(item)
 
-func _do_throw(index: int, target_cell: Vector2i) -> void:
-	if index < 0 or index >= Bag.get_inventory().size():
-		_throw_pending = false
-		throw_resolved.emit(false)
-		return
-	var item = Bag.remove_one(index)   # 每次只扔一个
+func _on_item_selection_cancelled() -> void:
+	_item_selection_resolved.emit(null)
+
+# 放下：把物品摆到指定格（放下与扔出共用）。飞行动画 + 落地 + 刷可见性。
+# 目标格与英雄同格时（放下）_animate_throw 直接返回，不产生飞行。
+# 只认"已取出的物品"——从背包取出归 Item.detach/detach_all；记账与推进回合由 Item 收尾。
+func drop(item: Item, cell: Vector2i) -> bool:
+	if auto_walking:
+		_stop_auto_walk()
+	if not is_player_turn():
+		return false
 	if item == null:
-		_throw_pending = false
-		throw_resolved.emit(false)
-		return
-	var landing = MapManager.throw_landing_cell(hero.grid_pos, target_cell)
+		return false
 	is_animating = true   # 飞行期间挡输入，避免半途再次行动
-	await _animate_throw(item, landing)
-	create_floor_item(item, landing)
+	await _animate_throw(item, cell)
+	create_floor_item(item, cell)
 	update_items_visibility()   # 落点可能未探索：立即按视野决定可见性，避免闪现
 	is_animating = false
-	print("投掷：", item.item_name, " 落于 ", landing)
-	_throw_pending = false
-	throw_resolved.emit(true)
+	print("放置：", item.item_name, " x", item.item_quantity, " 于 ", cell)
+	return true
 
 # 物品飞出动画：一份临时视觉从英雄格飞向落点，飞完自毁，随后才真正落地。
 # 线性插值 + 时长正比于距离 = 匀速飞行（原来 QUAD/EASE_IN 会先慢后快，看着像越飞越快）。
@@ -655,25 +729,6 @@ func _animate_throw(item_data: Item, landing: Vector2i) -> void:
 	await tween.finished
 	if is_instance_valid(fly):
 		fly.queue_free()
-
-# 放下：把选中物品整摞放在英雄本格（无需选格，不消耗投掷距离）。纯摆位服务，
-# 记账/推进回合由 Item 收尾。返回是否真的放下了。
-func drop_all_from_inventory(index: int) -> bool:
-	if _selector.active:
-		_selector.cancel()   # 关掉可能开着的投掷选取
-	if auto_walking:
-		_stop_auto_walk()
-	if not is_player_turn():
-		return false
-	if index < 0 or index >= Bag.get_inventory().size():
-		return false
-	var item = Bag.remove_item(index)   # 整摞取出
-	if item == null:
-		return false
-	create_floor_item(item, hero.grid_pos)
-	update_items_visibility()
-	print("放下：", item.item_name, " x", item.quantity)
-	return true
 
 func _on_inventory_updated():
 	inventory_ui.refresh()

@@ -3,31 +3,31 @@
 # 用法：var result = RegularLevel.generate(depth, feeling)
 # 返回字典 { "map_data": Array2D, "rooms": Array, "mobs": Array, "items": Array, "traps": Array, "entrance": Vector2i, "exit": Vector2i }
 
-extends Object
+extends Node2D
 class_name RegularLevel
 
-# ---------- 地形常量（与 MapManager 保持一致） ----------
-const CHASM       = 0
-const EMPTY       = 1
-const GRASS       = 2
-const EMPTY_WELL  = 3
-const WALL        = 4
-const DOOR        = 5
-const OPEN_DOOR   = 6
-const ENTRANCE    = 7
-const EXIT        = 8
-const EMBERS      = 9
-const LOCKED_DOOR = 10
-const WATER       = 11
-const HIGH_GRASS  = 12
-const FURROWED_GRASS = 13
+# 纯静态地图生成器：唯一对外接口是 static generate()（MapManager.generate_level 调用）。
+# 一度继承 Level（SPD 移植的新层），随新层整体放弃而解除——本文件对 Level 的成员零使用。
+
+# ---------- 地形常量（数值真相在 Terrain，这里只是简写别名） ----------
+const CHASM          := Terrain.CHASM
+const EMPTY          := Terrain.EMPTY
+const GRASS          := Terrain.GRASS
+const EMPTY_WELL     := Terrain.EMPTY_WELL
+const WALL           := Terrain.WALL
+const DOOR           := Terrain.DOOR
+const OPEN_DOOR      := Terrain.OPEN_DOOR
+const ENTRANCE       := Terrain.ENTRANCE
+const EXIT           := Terrain.EXIT
+const EMBERS         := Terrain.EMBERS
+const LOCKED_DOOR    := Terrain.LOCKED_DOOR
+const WATER          := Terrain.WATER
+const HIGH_GRASS     := Terrain.HIGH_GRASS
+const FURROWED_GRASS := Terrain.FURROWED_GRASS
 
 # ---------- 地图尺寸 ----------
 const MAP_WIDTH  = 30
 const MAP_HEIGHT = 20
-
-# 全部已知怪种（MonsterData 清单）；生成时按深度加权抽取
-const SPAWN_TABLE: SpawnTable = preload("res://resources/mobs/spawn_table.tres")
 
 # ---------- 房间类 ----------
 class Room:
@@ -308,11 +308,7 @@ static func place_mobs(map_data: Array, rooms: Array, entrance_room: Room, depth
 		var cell = room.random_point()
 		if map_data[cell.y][cell.x] == EMPTY or map_data[cell.y][cell.x] == GRASS:
 			# 检查是否已被占用（简化，这里只放置位置）
-			# 按深度从怪种表加权抽一种；本层无可用怪种则不放
-			var data: MonsterData = SPAWN_TABLE.pick(depth, rng)
-			if data == null:
-				continue
-			mobs.append({"pos": cell, "data": data})
+			mobs.append({"pos": cell, "type": "rat", "hp": 8, "atk": 2})
 			placed += 1
 	return mobs
 

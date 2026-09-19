@@ -1,18 +1,28 @@
 extends Item
 class_name Scroll
 
-const DUR_READ := 1.0   # 阅读耗时
+const TIME_TO_READ := 1.0   # 阅读耗时
 
+# 卷轴天然可堆叠（同 Potion）。必须放在 _init 而不能用 _ready：
+# Item 是 Resource，没有 _ready 回调。子类覆写 _init 时必须调 super()，否则本函数不执行。
+func _init(lvl: int = 0) -> void:
+	super(lvl)
+	stackable = true
+	
 func actions(hero: Hero):
 	return super(hero) + ["阅读"]
 
-func execute(hero: Hero, action: String) -> void:
+func execute(hero: Hero, action: String = default_action) -> void:
+	await super(hero, action)
 	if action == "阅读":
-		read(hero)
-		consume()
-		await end_action(hero, DUR_READ)
-	else:
-		await super(hero, action)   # 放下/扔出由基类处理
+		# do_read 可能是协程（鉴定卷轴要等玩家在背包里点选一件物品），必须 await。
+		# 返回 false = 玩家取消：本次不成立，不记时、不消耗卷轴。
+		if await do_read(hero):
+			hero.spend(TIME_TO_READ)
 
-func read(curUser: Char):
+# 返回"本次阅读是否成立"。子类覆写时取消/无法成立的分支 return false。
+func do_read(curUser: Char) -> bool:
+	return true
+
+func read_animation():
 	pass

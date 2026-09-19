@@ -8,24 +8,33 @@ var items: Array = []
 # 初始背包：新游戏时给三种物品各一份；clear() 保证重进/新档是干净的一份而非累加
 func init_starting_inventory() -> void:
 	clear()
-	PotionOfHealing.new().collect(5)
-	PotionOfStrength.new().collect(5)
-	PotionOfExperience.new().collect(5)
+	PotionOfHealing.new().quantity(5).collect()
+	PotionOfStrength.new().quantity(5).collect()
+	PotionOfExperience.new().quantity(5).collect()
+	PotionOfMindVision.new().quantity(5).collect()
 	
-	ScrollOfMagicMapping.new().collect(3)
-	ScrollOfTeleportation.new().collect(5)
+	ScrollOfIdentify.new().quantity(5).collect()
+	ScrollOfMagicMapping.new().quantity(5).collect()
+	ScrollOfTeleportation.new().quantity(5).collect()
+	ScrollOfLullaby.new().quantity(5).collect()
 	
 	WornShortsword.new().collect()
 	Whip.new().collect()
+	
+	ClothArmor.new(1).collect()
+	
+	Food.new().quantity(5).collect()
 
 func add_item(item: Item) -> bool:
 	if item.stackable:
 		for inv_item in items:
 			if inv_item.item_name == item.item_name:
-				inv_item.quantity += item.quantity
+				inv_item.item_quantity += item.item_quantity
 				emit_signal("inventory_updated")
 				return true
-	items.append(item.duplicate())
+	# 直接收原实例，不要 duplicate()：Resource.duplicate() 会重挂脚本、用默认实参重跑
+	# _init，构造参数（如护甲等级）会被清零，只剩 _init 里重新算出来的字段。
+	items.append(item)
 	emit_signal("inventory_updated")
 	return true
 
@@ -43,10 +52,10 @@ func remove_one(index: int) -> Item:
 	if index < 0 or index >= items.size():
 		return null
 	var item = items[index]
-	if item.stackable and item.quantity > 1:
-		item.quantity -= 1
-		var one: Item = item.duplicate()
-		one.quantity = 1
+	if item.stackable and item.item_quantity > 1:
+		item.item_quantity -= 1
+		var one: Item = item.copy()   # 用 Item.copy()：duplicate() 会重跑 _init 清零构造参数
+		one.item_quantity = 1
 		emit_signal("inventory_updated")
 		return one
 	items.remove_at(index)
