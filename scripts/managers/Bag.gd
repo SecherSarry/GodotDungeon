@@ -28,7 +28,7 @@ func init_starting_inventory() -> void:
 func add_item(item: Item) -> bool:
 	if item.stackable:
 		for inv_item in items:
-			if inv_item.item_name == item.item_name:
+			if inv_item.name() == item.name():
 				inv_item.item_quantity += item.item_quantity
 				emit_signal("inventory_updated")
 				return true

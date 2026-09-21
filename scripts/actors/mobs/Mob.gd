@@ -63,7 +63,7 @@ func can_see(c: Char) -> bool:
 	if c == null or not is_instance_valid(c):
 		return false
 	var p: Vector2i = c.grid_pos
-	if p.x < 0 or p.x >= MapManager.MAP_WIDTH or p.y < 0 or p.y >= MapManager.MAP_HEIGHT:
+	if p.x < 0 or p.x >= LevelManager.MAP_WIDTH or p.y < 0 or p.y >= LevelManager.MAP_HEIGHT:
 		return false
 	return FOV[p.y][p.x]
 

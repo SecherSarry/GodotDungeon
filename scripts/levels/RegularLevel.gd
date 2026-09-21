@@ -6,7 +6,7 @@
 extends Node2D
 class_name RegularLevel
 
-# 纯静态地图生成器：唯一对外接口是 static generate()（MapManager.generate_level 调用）。
+# 纯静态地图生成器：唯一对外接口是 static generate()（LevelManager.generate_level 调用）。
 # 一度继承 Level（SPD 移植的新层），随新层整体放弃而解除——本文件对 Level 的成员零使用。
 
 # ---------- 地形常量（数值真相在 Terrain，这里只是简写别名） ----------

@@ -8,4 +8,5 @@ func _init():
 
 func drink(curUser: Char):
 	super(curUser)
+	detach()
 	curUser.earn_exp(curUser.max_exp(), self);

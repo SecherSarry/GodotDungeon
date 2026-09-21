@@ -4,7 +4,13 @@ extends Node2D
 @onready var water_layer = $Layers/WaterLayer
 @onready var wall_layer = $Layers/WallLayer
 @onready var fog_layer = $Layers/FogLayer
-@onready var hero: Hero = preload("res://tscns/Hero.tscn").instantiate()
+
+var hero: Hero:
+	get:
+		return GameState.hero
+	set(value):
+		GameState.hero = value
+
 @onready var camera = $Camera2D
 @onready var inventory_ui = $CanvasLayer/InventoryUI  # 背包UI
 @onready var zoom_in_button = $CanvasLayer/Button      # 缩放放大按钮
@@ -61,12 +67,13 @@ func _ready():
 	InputHub.zoom_requested.connect(_on_zoom_requested)
 	
 	Bag.inventory_updated.connect(_on_inventory_updated)
+	SaveManager.entity_provider = capture_entities   # 当前层的怪/物由本场景采集（SaveManager 不认节点）
 	inventory_ui.game_scene = self   # 必须先于任何会触发 inventory_updated 的操作，否则 refresh 拿到空 game_scene
 	inventory_ui.item_chosen.connect(_on_item_chosen)
 	inventory_ui.selection_cancelled.connect(_on_item_selection_cancelled)
 	zoom_in_button.pressed.connect(_on_zoom_in_button_pressed)   # 缩放放大按钮
 
-
+	Scroll.new().init_nickname()
 	init_layers()
 
 	# 地格选取器：在 Layers 之后加入，才能盖住迷雾层绘制高亮（投掷/施法等复用）
@@ -101,14 +108,15 @@ func _process(delta):
 	text += "exp: " + str(hero.exp)+ "/" + str(hero.max_exp()) + "\n"
 	text += "饥饿度: " + str(hero.get_buff(Hunger).hunger())+ "/450\n"
 	if hero.weapon != null:
-		text += "当前武器: " + hero.weapon.item_name + "(" + str(hero.weapon.min()) + "-" + str(hero.weapon.max()) + ")\n"
+		text += "当前武器: " + hero.weapon.name() + "(" + str(hero.weapon.min()) + "-" + str(hero.weapon.max()) + ")\n"
 	else:
 		text += "当前武器: 无\n"
 	if hero.armor != null:
-		text += "当前护甲: " + hero.armor.item_name + "(" + str(hero.armor.dr_min()) + "-" + str(hero.armor.dr_max()) + ")\n"
+		text += "当前护甲: " + hero.armor.name() + "(" + str(hero.armor.dr_min()) + "-" + str(hero.armor.dr_max()) + ")\n"
 	else:
 		text += "当前护甲: 无\n"
-	text += "精准: " + str(hero.attack_skill) + " 闪避：" + str(hero.defense_skill) + "\n"
+	text += "精准: " + str(hero.attack_skill) + " 闪避：" + str(hero.defense_skill) + "\n\n"
+	text += "当前楼层: " + str(GameState.depth) + "\n"
 	$CanvasLayer/StatusLabel.text = text
 
 	_refresh_buff_list()
@@ -151,9 +159,9 @@ func init_layers():
 func init_water_layer():
 	water_layer.modulate.a = 0.9
 	var water_cells: Array[Vector2i] = []
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
-			if MapManager.map_data[y][x] == MapManager.WATER:
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
+			if LevelManager.map_data[y][x] == Terrain.WATER:
 				water_layer.draw_cell(Vector2i(x, y), 0)
 				water_cells.append(Vector2i(x, y))
 	if water_cells.is_empty():
@@ -161,26 +169,26 @@ func init_water_layer():
 	water_layer.set_cells_terrain_connect(water_cells, 0, 1)
 	
 func init_bedrock_layer():
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
 			var pos = Vector2i(x, y)
 			var tile
-			if pos == MapManager.hero_spawn:
+			if pos == LevelManager.hero_spawn:
 				tile = TILE_ENTRENCE   # 入口（上一层）
-			elif pos == MapManager.exit_cell:
+			elif pos == LevelManager.exit_cell:
 				tile = TILE_EXIT       # 出口（下一层）
 			else:
-				match MapManager.map_data[y][x]:
-					MapManager.CHASM:	tile = TILE_CHASM
-					MapManager.WATER:	tile = TILE_FLOOR
-					MapManager.FLOOR:	tile = TILE_FLOOR
-					MapManager.GRASS:	tile = TILE_GRASS
+				match LevelManager.map_data[y][x]:
+					Terrain.CHASM:	tile = TILE_CHASM
+					Terrain.WATER:	tile = TILE_FLOOR
+					Terrain.EMPTY:	tile = TILE_FLOOR
+					Terrain.GRASS:	tile = TILE_GRASS
 					_:					tile = TILE_CHASM
 			bedrock_layer.set_cell(pos, 0, tile)
 
 func init_wall_layer():
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
 			var pos = Vector2i(x, y)
 			var tile = get_wall_tile(x, y)
 			if tile != Vector2i(-1, -1): wall_layer.set_cell(pos, 0, tile)
@@ -189,22 +197,22 @@ func init_wall_layer():
 func get_wall_tile(x: int, y: int) -> Vector2i:
 	var mask = 0
 	# 检测自己
-	var c = MapManager.map_data[y][x] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var c = LevelManager.map_data[y][x] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 	
 	# 检测左
-	var l = x > 0 and MapManager.map_data[y][x-1] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var l = x > 0 and LevelManager.map_data[y][x-1] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 
 	# 检测左下
-	var ld = x > 0 and y < MapManager.MAP_HEIGHT - 1 and MapManager.map_data[y+1][x-1] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var ld = x > 0 and y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x-1] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 
 	# 检测下
-	var d = y < MapManager.MAP_HEIGHT - 1 and MapManager.map_data[y+1][x] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var d = y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 
 	# 检测右下
-	var dr = x < MapManager.MAP_WIDTH - 1 and y < MapManager.MAP_HEIGHT - 1 and MapManager.map_data[y+1][x+1] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var dr = x < LevelManager.MAP_WIDTH - 1 and y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x+1] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 
 	# 检测右
-	var r = x < MapManager.MAP_WIDTH - 1 and MapManager.map_data[y][x+1] in [MapManager.WALL, MapManager.DOOR, MapManager.OPEN_DOOR, MapManager.LOCKED_DOOR, MapManager.CHASM]
+	var r = x < LevelManager.MAP_WIDTH - 1 and LevelManager.map_data[y][x+1] in [Terrain.WALL, Terrain.DOOR, Terrain.OPEN_DOOR, Terrain.LOCKED_DOOR, Terrain.CHASM]
 
 	if  c and 				 !d:				return Vector2i(0, 5)
 	if  c and  l and !ld and  d and !dr	:		return Vector2i(6, 9)
@@ -224,15 +232,15 @@ func get_wall_tile(x: int, y: int) -> Vector2i:
 	else: return Vector2i(-1, -1)
 		
 func init_foglayer():
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
 			fog_layer.set_cell(Vector2i(x, y), 0, TILE_FOG_UNSEEN)
 
 func refresh_foglayer():
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
 			var pos = Vector2i(x, y)
-			if MapManager.explored[y][x]:
+			if LevelManager.explored[y][x]:
 				if hero.FOV[y][x]:
 					fog_layer.set_cell(pos, -1)
 				else:
@@ -264,7 +272,7 @@ func update_monsters_visibility():
 		if is_instance_valid(mob):
 			var cell = mob.grid_pos
 			# 检查坐标是否在有效范围内
-			if cell.x >= 0 and cell.x < MapManager.MAP_WIDTH and cell.y >= 0 and cell.y < MapManager.MAP_HEIGHT:
+			if cell.x >= 0 and cell.x < LevelManager.MAP_WIDTH and cell.y >= 0 and cell.y < LevelManager.MAP_HEIGHT:
 				mob.visible = hero.FOV[cell.y][cell.x]
 			else:
 				mob.visible = false
@@ -273,14 +281,14 @@ func update_items_visibility():
 	for item_node in items_on_floor:
 		if is_instance_valid(item_node):
 			var cell = item_node.grid_pos
-			if cell.x >= 0 and cell.x < MapManager.MAP_WIDTH and cell.y >= 0 and cell.y < MapManager.MAP_HEIGHT:
+			if cell.x >= 0 and cell.x < LevelManager.MAP_WIDTH and cell.y >= 0 and cell.y < LevelManager.MAP_HEIGHT:
 				item_node.visible = hero.FOV[cell.y][cell.x]
 			else:
 				item_node.visible = false
 				
 # ---------- 放置英雄：实例化 Hero.tscn 后摆到 MapManager 决策的出生点并加入场景树 ----------
 func render_hero():
-	hero.grid_pos = MapManager.hero_spawn
+	hero.grid_pos = LevelManager.hero_spawn
 	hero.position = bedrock_layer.map_to_local(hero.grid_pos)
 	hero.game_scene = self
 	hero.z_index = CHAR_Z   # 角色压在地面物品之上
@@ -288,9 +296,14 @@ func render_hero():
 	hero.play_anim("idle")   # 生成即静止动画
 	TurnManager.register_actor(hero)
 
-# ---------- 渲染怪物：按 MapManager.monster_cells 实例化怪物节点 ----------
+# ---------- 渲染怪物：按 LevelManager.monster_cells 实例化怪物节点 ----------
 func render_monsters():
-	for cell in MapManager.monster_cells:
+	# 有本层快照（读档或回访）→ 按快照重建（含存下的血量）。
+	var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
+	if not ents.is_empty():
+		_render_monsters_from(ents.get("monsters", []))
+		return
+	for cell in LevelManager.monster_cells:
 		var mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
 		mob.grid_pos = cell
 		mob.position = bedrock_layer.map_to_local(cell)
@@ -412,13 +425,13 @@ func try_hero_action(target_cell: Vector2i):
 		# 脚下：拾取优先；无物品时再看是否站在入口/出口上换层
 		if try_collect(hero):
 			acted = true
-		elif hero.grid_pos == MapManager.hero_spawn:
+		elif hero.grid_pos == LevelManager.hero_spawn:
 			is_animating = false
-			_change_floor(-1)   # 站在入口 → 上一层
+			_change_floor(GameState.depth - 1)   # 站在入口 → 上一层
 			return
-		elif hero.grid_pos == MapManager.exit_cell:
+		elif hero.grid_pos == LevelManager.exit_cell:
 			is_animating = false
-			_change_floor(1)    # 站在出口 → 下一层
+			_change_floor(GameState.depth + 1)   # 站在出口 → 下一层
 			return
 	else:
 		var enemy = TurnManager.get_monster_at(target_cell)
@@ -435,23 +448,16 @@ func try_hero_action(target_cell: Vector2i):
 		await TurnManager.next()
 
 # ---------- 换层 ----------
-# 站入口 → floor_delta=-1（上一层）；站出口 → +1（下一层）。到顶则拒绝。
-# 离开前先把本层快照进 MapManager.floor_cache（含迷雾记忆与剩余怪/掉落物），
-# 返回时原样载入，因此来回跑不会重掷地图。不消耗回合。
-func _change_floor(floor_delta: int) -> void:
-	var target_depth = MapManager.current_depth + floor_delta
-	if target_depth < 1:
-		print("已经是地牢顶层，无法再向上")
+# 数据侧（存档 / 进层 / 落点）交给 LevelManager.switch_level；本场景负责节点侧：
+# 开走前采集实体快照，回来后按落点重建视图。到顶则 switch_level 返回空字典，什么也不做。
+func _change_floor(depth: int) -> void:
+	var result = LevelManager.switch_level(depth, capture_entities())
+	if result.is_empty():
 		return
-	MapManager.save_floor(MapManager.current_depth, _capture_entities())
-	var restored = MapManager.enter_floor(target_depth)
-	# 落点：下楼/新层 → 该层入口；上楼回访 → 该层出口（即当初下来所走的台阶），进出对称。
-	var landing = MapManager.exit_cell if floor_delta < 0 else MapManager.hero_spawn
-	_rebuild_level(landing, restored)
-	print("进入第 ", target_depth, " 层", "（返回）" if restored else "")
+	rebuild_level(result["landing"], result["restored"])
 
-# 采集当前层活实体 → 快照（怪的位置与血量、地面物品）
-func _capture_entities() -> Dictionary:
+# ---------- 采集当前层活实体 → 快照（怪的位置与血量、地面物品） ----------
+func capture_entities() -> Dictionary:
 	var monsters := []
 	for mob in TurnManager.monsters:
 		if is_instance_valid(mob):
@@ -462,7 +468,9 @@ func _capture_entities() -> Dictionary:
 			items.append({ "cell": node.grid_pos, "item": node.item_data })
 	return { "monsters": monsters, "items": items }
 
-func _rebuild_level(landing: Vector2i, restored: bool) -> void:
+# 换层后重建视图：清旧实体、重绘地图层、摆好英雄、按快照或新生成渲染怪/物。
+# 由 _change_floor 在 LevelManager 完成数据侧后调用。
+func rebuild_level(landing: Vector2i, restored: bool) -> void:
 	auto_walking = false
 	_walk_target = Vector2i(-1, -1)
 	_walk_monster = null
@@ -485,7 +493,7 @@ func _rebuild_level(landing: Vector2i, restored: bool) -> void:
 	hero.snap_to(landing)
 	hero.reset_timeline()
 	if restored:
-		var ents = MapManager.get_floor_entities(MapManager.current_depth)
+		var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
 		_render_monsters_from(ents.get("monsters", []))
 		_render_items_from(ents.get("items", []))
 	else:
@@ -498,7 +506,7 @@ func _rebuild_level(landing: Vector2i, restored: bool) -> void:
 # 从快照重建怪（位置 + 血量）；HP 在 add_child 之后设，避免被 _ready 的初始值覆盖
 func _render_monsters_from(snapshot: Array) -> void:
 	for m in snapshot:
-		var mob = preload("res://tscns/Mob.tscn").instantiate()
+		var mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
 		mob.grid_pos = m["cell"]
 		mob.position = bedrock_layer.map_to_local(m["cell"])
 		mob.game_scene = self
@@ -510,6 +518,10 @@ func _render_monsters_from(snapshot: Array) -> void:
 
 func _render_items_from(snapshot: Array) -> void:
 	for e in snapshot:
+		# 快照里的物品可能为空（Item.serialize 尚未实现，存下来的每件都是 {}）：
+		# 空项一律跳过，不能喂给 create_floor_item——它会在合并循环里对 null 取 .name() 崩掉。
+		if e.get("item", null) == null:
+			continue
 		create_floor_item(e["item"], e["cell"])
 
 # ---------- 自动行走：沿已探索最短路径逐格走近；途中看到新出现的怪立即暂停 ----------
@@ -577,7 +589,7 @@ func _visible_monster_ids() -> Dictionary:
 		if not is_instance_valid(mob):
 			continue
 		var c = mob.grid_pos
-		if c.x >= 0 and c.x < MapManager.MAP_WIDTH and c.y >= 0 and c.y < MapManager.MAP_HEIGHT \
+		if c.x >= 0 and c.x < LevelManager.MAP_WIDTH and c.y >= 0 and c.y < LevelManager.MAP_HEIGHT \
 				and hero.FOV[c.y][c.x]:
 			ids[mob.get_instance_id()] = true
 	return ids
@@ -593,19 +605,24 @@ func get_cell_from_mouse_pos() -> Vector2i:
 	var mouse_pos = get_global_mouse_position()
 	var local_pos = bedrock_layer.to_local(mouse_pos)
 	var tile_pos = bedrock_layer.local_to_map(local_pos)
-	if tile_pos.x >= 0 and tile_pos.x < MapManager.MAP_WIDTH and tile_pos.y >= 0 and tile_pos.y < MapManager.MAP_HEIGHT:
+	if tile_pos.x >= 0 and tile_pos.x < LevelManager.MAP_WIDTH and tile_pos.y >= 0 and tile_pos.y < LevelManager.MAP_HEIGHT:
 		return tile_pos
 	return Vector2i(-1, -1)
 
 # ---------- 物品系统 ----------
-# 渲染地面物品：按 MapManager.item_placements 实例化 Item 节点（含同格合并逻辑沿用 create_floor_item）
+# 渲染地面物品：按 LevelManager.item_placements 实例化 Item 节点（含同格合并逻辑沿用 create_floor_item）
 func render_items():
-	for placement in MapManager.item_placements:
+	# 有本层快照（读档或回访）→ 按快照重建；物品内容仍缺序列化，空项由 _render_items_from 跳过。
+	var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
+	if not ents.is_empty():
+		_render_items_from(ents.get("items", []))
+		return
+	for placement in LevelManager.item_placements:
 		create_floor_item(placement["item"], placement["cell"])
 
 func create_floor_item(item_data: Item, cell: Vector2i):
 	for item_node in items_on_floor:
-		if item_node.grid_pos == cell and item_node.item_data.item_name == item_data.item_name:
+		if item_node.grid_pos == cell and item_node.item_data.name() == item_data.name():
 			item_node.item_data.item_quantity += item_data.item_quantity
 			return
 	var item_node = preload("res://tscns/Item.tscn").instantiate()
@@ -707,7 +724,7 @@ func drop(item: Item, cell: Vector2i) -> bool:
 	create_floor_item(item, cell)
 	update_items_visibility()   # 落点可能未探索：立即按视野决定可见性，避免闪现
 	is_animating = false
-	print("放置：", item.item_name, " x", item.item_quantity, " 于 ", cell)
+	print("放置：", item.name(), " x", item.item_quantity, " 于 ", cell)
 	return true
 
 # 物品飞出动画：一份临时视觉从英雄格飞向落点，飞完自毁，随后才真正落地。

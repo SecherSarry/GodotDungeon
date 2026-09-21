@@ -61,7 +61,7 @@ func _label(item: Item, slot: int = -1) -> String:
 	if item == null:
 		# 空槽也占一行，保持列表下标与 belongings 下标一致；0=武器槽、1=护甲槽
 		return "无武器" if slot == 0 else "无护甲"
-	var text = item.item_name
+	var text = item.name()
 	if item.level() > 0 and item.level_known:
 		text += "+" + str(item.level())   # 有等级才显示：0 级不缀 +0
 	if item.stackable and item.item_quantity > 1:

@@ -14,7 +14,7 @@ func do_read(curUser: Char) -> bool:
 		if not is_instance_valid(mob):
 			continue
 		var c: Vector2i = mob.grid_pos
-		if c.x < 0 or c.x >= MapManager.MAP_WIDTH or c.y < 0 or c.y >= MapManager.MAP_HEIGHT:
+		if c.x < 0 or c.x >= LevelManager.MAP_WIDTH or c.y < 0 or c.y >= LevelManager.MAP_HEIGHT:
 			continue
 		if curUser.FOV[c.y][c.x]:
 			Drowsy.new().attach_to(mob, Drowsy.DURATION)

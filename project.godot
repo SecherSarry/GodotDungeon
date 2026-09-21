@@ -22,6 +22,9 @@ TurnManager="*uid://bxkd3wkugtruk"
 Bag="*uid://mlxghrbjfkry"
 InputHub="*res://scripts/InputHub.gd"
 AudioManager="*uid://ct7phtnucdfgi"
+GameState="*uid://cuetac6mpcrvv"
+SaveManager="*uid://b27ybntproi45"
+LevelManager="*uid://bdrkd4vpqm5hd"
 
 [display]
 

@@ -29,6 +29,9 @@ var bones: bool = false
 
 var item_name: String = "未知物品"
 
+func name() -> String:
+	return item_name
+
 func actions(hero: Hero):
 	var actions = ["放下", "扔出"]
 	return actions
@@ -91,7 +94,7 @@ func execute(hero: Hero, action: String = default_action) -> void:
 
 func identify(by_hero: bool = true) -> Item:
 	level_known = true
-	cursed_known = true		
+	cursed_known = true
 	return self
 	
 func _init(lvl: int = 0) -> void:
@@ -113,7 +116,7 @@ func copy() -> Item:
 func collect() -> bool:
 	#这里检查背包
 	Bag.add_item(self)
-	print("拾取", item_name, " x", item_quantity)
+	print("拾取", name(), " x", item_quantity)
 	return true
 	
 # 从背包取出一件（投掷用）：可堆叠只扣 1、返回数量为 1 的副本，否则整件取出并返回。

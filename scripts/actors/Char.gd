@@ -182,19 +182,19 @@ func step_toward(target: Vector2i, explored_only: bool = true) -> bool:
 # 每格只处理一次（O(r²) 对 O(r³)），遮挡形状对称，不再斜向穿过墙角看到背后格子。
 func fieldofview() -> void:
 	if FOV.is_empty():
-		for y in range(MapManager.MAP_HEIGHT):
+		for y in range(LevelManager.MAP_HEIGHT):
 			var row := []
-			for x in range(MapManager.MAP_WIDTH):
+			for x in range(LevelManager.MAP_WIDTH):
 				row.append(false)
 			FOV.append(row)
 	else:
 		# 尺寸是常量、跨层不变，故网格只建一次；之后原地清空重用，不每回合重排 600 格
-		for y in range(MapManager.MAP_HEIGHT):
-			for x in range(MapManager.MAP_WIDTH):
+		for y in range(LevelManager.MAP_HEIGHT):
+			for x in range(LevelManager.MAP_WIDTH):
 				FOV[y][x] = false
 
 	var origin := grid_pos
-	if origin.x < 0 or origin.x >= MapManager.MAP_WIDTH or origin.y < 0 or origin.y >= MapManager.MAP_HEIGHT:
+	if origin.x < 0 or origin.x >= LevelManager.MAP_WIDTH or origin.y < 0 or origin.y >= LevelManager.MAP_HEIGHT:
 		return
 	FOV[origin.y][origin.x] = true
 
@@ -254,12 +254,12 @@ func _cast_light(origin: Vector2i, row: int, start: float, end: float,
 # 是否挡光。判据取 Terrain 的语义标志而非硬编码地形 id——视野因此不必认识地形表，
 # 将来加门/窗只需改 Terrain 一处。越界一律视为挡光：光不外泄，边界自然收束。
 func _blocks_sight(cell_x: int, cell_y: int) -> bool:
-	if cell_x < 0 or cell_x >= MapManager.MAP_WIDTH or cell_y < 0 or cell_y >= MapManager.MAP_HEIGHT:
+	if cell_x < 0 or cell_x >= LevelManager.MAP_WIDTH or cell_y < 0 or cell_y >= LevelManager.MAP_HEIGHT:
 		return true
-	return Terrain.has_flag(MapManager.map_data[cell_y][cell_x], Terrain.FLAG_LOS_BLOCKING)
+	return Terrain.has_flag(LevelManager.map_data[cell_y][cell_x], Terrain.FLAG_LOS_BLOCKING)
 
 func _set_visible(cell_x: int, cell_y: int) -> void:
-	if cell_x < 0 or cell_x >= MapManager.MAP_WIDTH or cell_y < 0 or cell_y >= MapManager.MAP_HEIGHT:
+	if cell_x < 0 or cell_x >= LevelManager.MAP_WIDTH or cell_y < 0 or cell_y >= LevelManager.MAP_HEIGHT:
 		return
 	FOV[cell_y][cell_x] = true
 

@@ -3,12 +3,16 @@ class_name Scroll
 
 const TIME_TO_READ := 1.0   # 阅读耗时
 
+
 # 卷轴天然可堆叠（同 Potion）。必须放在 _init 而不能用 _ready：
 # Item 是 Resource，没有 _ready 回调。子类覆写 _init 时必须调 super()，否则本函数不执行。
 func _init(lvl: int = 0) -> void:
 	super(lvl)
 	stackable = true
 	
+func name() -> String:
+	return item_name if is_identified() else nickname[item_name]
+
 func actions(hero: Hero):
 	return super(hero) + ["阅读"]
 
@@ -26,3 +30,11 @@ func do_read(curUser: Char) -> bool:
 
 func read_animation():
 	pass
+
+static var nickname: Dictionary = {}
+var original_names = ["升级卷轴", "鉴定卷轴", "驱邪卷轴", "镜像卷轴", "充能卷轴", "传送卷轴", "催眠卷轴", "探地卷轴", "盛怒卷轴", "复仇卷轴", "恐惧卷轴", "嬗变卷轴"]
+var fake_names = ["KAUNAN卷轴", "SOWILO卷轴", "LAGUZ卷轴", "YNGVI卷轴", "GYFU卷轴", "RAIDO卷轴", "ISAZ卷轴", "MANNAZ卷轴", "NAUDIZ卷轴", "BERKANAN卷轴", "ODAL卷轴", "TIWAZ卷轴"]
+func init_nickname():
+	fake_names.shuffle()
+	for i in range(0, original_names.size()):
+		nickname[original_names[i]] = fake_names[i]

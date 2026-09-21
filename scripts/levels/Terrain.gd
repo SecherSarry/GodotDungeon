@@ -2,16 +2,16 @@
 # 地形字典：地形 id → 一组布尔标志位。地形语义（可走 / 挡视线 / 可燃 / 实心 …）集中在这里，
 # 其它地方不再各自维护「哪些地形算可走」的白名单。
 #
-# id 沿用 MapManager 与 RegularLevel 既有的 0–13，数值可直接互通。
+# id 沿用 RegularLevel 既有的 0–13，数值可直接互通。
 class_name Terrain
 extends RefCounted
 
 # ==================== 地形 id ====================
-# 0–13 与 MapManager 的 FLOOR/EMPTY_WELL/… 逐一对应，勿擅自改动。
-const CHASM          := 0    # 深渊（= MapManager.CHASM）
-const EMPTY          := 1    # 空地板（= MapManager.FLOOR）
+# 0–13 为既有地形 id，数值可直接互通，勿擅自改动。
+const CHASM          := 0    # 深渊
+const EMPTY          := 1    # 空地板
 const GRASS          := 2
-const EMPTY_WELL     := 3    # 空水井（= MapManager.EMPTY_WELL）
+const EMPTY_WELL     := 3    # 空水井
 const WALL           := 4
 const DOOR           := 5
 const OPEN_DOOR      := 6

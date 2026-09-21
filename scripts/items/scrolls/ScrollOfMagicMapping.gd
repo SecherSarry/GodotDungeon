@@ -9,9 +9,9 @@ func _init():
 # 这里只需触发并回显，无需直握场景。
 func do_read(curUser: Char) -> bool:
 	detach()
-	for y in MapManager.MAP_HEIGHT:
-		for x in MapManager.MAP_WIDTH:
-			MapManager.explored[y][x] = true
+	for y in LevelManager.MAP_HEIGHT:
+		for x in LevelManager.MAP_WIDTH:
+			LevelManager.explored[y][x] = true
 	
 	identify()
 	read_animation()
