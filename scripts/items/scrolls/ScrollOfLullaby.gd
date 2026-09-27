@@ -13,12 +13,9 @@ func do_read(curUser: Char) -> bool:
 	for mob in TurnManager.monsters:
 		if not is_instance_valid(mob):
 			continue
-		var c: Vector2i = mob.grid_pos
-		if c.x < 0 or c.x >= LevelManager.MAP_WIDTH or c.y < 0 or c.y >= LevelManager.MAP_HEIGHT:
-			continue
-		if curUser.FOV[c.y][c.x]:
-			Drowsy.new().attach_to(mob, Drowsy.DURATION)
-	Drowsy.new().attach_to(curUser, Drowsy.DURATION)
+		if curUser.FOV[mob.grid_pos.y][mob.grid_pos.x]:
+			Buff.affect(mob, Drowsy, Drowsy.DURATION)
+	Buff.affect(curUser, Drowsy, Drowsy.DURATION)
 
 	identify()
 	read_animation()

@@ -14,7 +14,7 @@ var map_data = []          # 地形类型（二维 int）
 var explored  = []         # 已探索（二维 bool）
 
 # ---------- 房间列表 ----------
-var rooms = []             # RegularLevel.Room 对象列表（仅生成期使用）
+var rooms = []             # Room 对象列表（仅生成期使用）
 
 # ---------- 实体内容数据 ----------
 var hero_spawn: Vector2i = Vector2i(1, 1)

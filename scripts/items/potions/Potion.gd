@@ -16,8 +16,23 @@ func actions(hero: Hero):
 func execute(hero: Hero, action: String = default_action) -> void:
 	await super(hero, action)
 	if action == "饮用":
-		hero.spend(TIME_TO_DRINK)
 		drink(hero)
 
-func drink(curUser: Char):
+func drink(hero: Hero):
+	hero.spend(TIME_TO_DRINK)
+	print("spend")
+	apply(hero)
+	
+func on_throw(cell: Vector2i):
+	pass
+	
+func apply(hero: Hero):
+	shatter(hero.grid_pos)
+	
+func shatter(cell: Vector2i):
+	splash(cell)
+	if GameState.hero.FOV[cell.y][cell.x]:
+		print("药剂打碎")
+	
+func splash(cell: Vector2i):
 	pass

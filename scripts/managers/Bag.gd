@@ -8,22 +8,6 @@ var items: Array = []
 # 初始背包：新游戏时给三种物品各一份；clear() 保证重进/新档是干净的一份而非累加
 func init_starting_inventory() -> void:
 	clear()
-	PotionOfHealing.new().quantity(5).collect()
-	PotionOfStrength.new().quantity(5).collect()
-	PotionOfExperience.new().quantity(5).collect()
-	PotionOfMindVision.new().quantity(5).collect()
-	
-	ScrollOfIdentify.new().quantity(5).collect()
-	ScrollOfMagicMapping.new().quantity(5).collect()
-	ScrollOfTeleportation.new().quantity(5).collect()
-	ScrollOfLullaby.new().quantity(5).collect()
-	
-	WornShortsword.new().collect()
-	Whip.new().collect()
-	
-	ClothArmor.new(1).collect()
-	
-	Food.new().quantity(5).collect()
 
 func add_item(item: Item) -> bool:
 	if item.stackable:

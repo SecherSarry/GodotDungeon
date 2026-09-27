@@ -17,26 +17,15 @@ func min(lvl: int = buffed_lvl()):
 func max(lvl: int = buffed_lvl()):
 	return 5*(tier+1) + lvl*(tier+1)
 
-func execute(hero: Hero, action: String = default_action) -> void:
-	await super(hero, action)   # 放下/扔出由基类处理
-	if action == "装备":
-		do_equip(hero)
-		detach()
-		hero.spend(TIME_TO_EQUIP)
-	elif action == "脱下":
-		do_unequip(hero)
-		hero.spend(TIME_TO_UNEQUIP)
-
-func is_equipped(hero: Hero) -> bool:
-	return hero.weapon == self
-
+# 装备全流程。直译 SPD KindOfWeapon.doEquip（KindOfWeapon.java:106）：
+#   先 detachAll(backpack) 把本件从背包取出 → 再让旧件 doUnequip(hero, true) 回包 →
+#   写槽 → 最后 hero.spend(timeToEquip(hero))。
+# 本子类与 Armor 只在**槽位名**上不同（hero.weapon vs hero.armor）：
+# 取件、旧件回包、记时三件都由 EquipableItem 的 do_unequip / TIME_TO_EQUIP 承担。
+# （原版 Weapon 用 detachAll、Armor 用 detach，对不可堆叠物两者等价，本工程统一 detach。）
 func do_equip(hero: Hero):
+	detach()   # 装备即离包
 	if hero.weapon != null:
-		hero.weapon.do_unequip(hero)   # 旧武器回包
+		hero.weapon.do_unequip(hero)   # 旧武器回包（扫 belongings 找自己、清槽、入包，并记旧件那次脱下耗时）
 	hero.weapon = self                 # 武器槽 = 本件（写入 belongings[0]）
-
-func do_unequip(hero: Hero):
-	if hero.weapon != null:
-		Bag.add_item(hero.weapon)
-	hero.weapon = null   # 空手槽用 null 表示（与护甲侧一致）
-	
+	hero.spend(TIME_TO_EQUIP)

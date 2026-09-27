@@ -46,9 +46,16 @@ const FLAG_PIT          := 128  # 坑：踏入即坠落
 
 # ==================== id → flags ====================
 # 标志取"游戏语义"而非"美术表现"：ENTRANCE/EXIT 当前无独立美术，按普通地板（可走）处理。
-# 关着的门（DOOR）挡路，开着的门（OPEN_DOOR）可走——这是 Terrain 与旧 MapManager.WALKABLE_CELLS
-# 唯一的语义分歧（旧白名单把关着的门也算可走）。RegularLevel 目前不产出 DOOR，故无实际影响；
-# 若将来要放门，以这里的语义为准。
+# 门分两类，与 SPD Terrain.java 的 flags 表逐条一致：
+# - DOOR/OPEN_DOOR 可走。DOOR 另带 FLAG_SOLID（原版 flags[DOOR] 一字不差）：
+#   可走 + 实心 = 原版所谓"软实心"——人过得去、投射物过不去，
+#   正是 Ballistica 里 IGNORE_SOFT_SOLID 要区分的那一类。
+#   "开门"是走上去那一刻的附带动作（见 Char.walk_to），不体现在可走性上。
+# - LOCKED_DOOR 不可走（原版 flags[LOCKED_DOOR] = LOS_BLOCKING | SOLID）。
+#   原版要站到门下用对应钥匙解锁，本工程暂无钥匙系统，改成正交相邻即解锁——
+#   Char.walk_to 里 is_locked_door 那一支排在 is_walkable 之前，故不可走不影响解锁。
+#   改后自动寻路不再穿锁门，与原版同。
+# 关着的门仍 FLAG_LOS_BLOCKING——挡视线照旧。
 # 深渊可走"不过去"但不算实心——视线能穿过、怪会绕。
 const FLAGS := {
 	CHASM:          FLAG_PIT | FLAG_AVOID,
@@ -56,12 +63,12 @@ const FLAGS := {
 	GRASS:          FLAG_PASSABLE | FLAG_FLAMABLE,
 	EMPTY_WELL:     FLAG_PASSABLE,
 	WALL:           FLAG_LOS_BLOCKING | FLAG_SOLID,
-	DOOR:           FLAG_LOS_BLOCKING | FLAG_SOLID | FLAG_FLAMABLE,
+	DOOR:           FLAG_PASSABLE | FLAG_LOS_BLOCKING | FLAG_FLAMABLE | FLAG_SOLID,
 	OPEN_DOOR:      FLAG_PASSABLE | FLAG_FLAMABLE,
 	ENTRANCE:       FLAG_PASSABLE,
 	EXIT:           FLAG_PASSABLE,
 	EMBERS:         FLAG_PASSABLE,
-	LOCKED_DOOR:    FLAG_LOS_BLOCKING | FLAG_SOLID | FLAG_FLAMABLE,
+	LOCKED_DOOR:    FLAG_LOS_BLOCKING | FLAG_SOLID,
 	WATER:          FLAG_PASSABLE | FLAG_LIQUID,
 	HIGH_GRASS:     FLAG_PASSABLE | FLAG_FLAMABLE,
 	FURROWED_GRASS: FLAG_PASSABLE | FLAG_FLAMABLE,

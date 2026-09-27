@@ -8,4 +8,4 @@ func _init():
 func drink(curUser: Char):
 	super(curUser)
 	detach()
-	curUser.STR += 1
+	curUser.str += 1

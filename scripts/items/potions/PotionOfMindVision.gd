@@ -8,4 +8,4 @@ func _init():
 func drink(curUser: Char):
 	super(curUser)
 	detach()
-	MindVision.new().attach_to(curUser, MindVision.DURATION)
+	Buff.affect(curUser, MindVision, MindVision.DURATION)

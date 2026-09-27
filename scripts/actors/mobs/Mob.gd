@@ -9,12 +9,12 @@ func can_attack(enemy: Char):
 	return false
 
 func _ready():
-	maxHP = 8
-	HP = 8
+	max_hp = 8
+	hp = 8
 	add_to_group("monster")
 	rest_anim = "run"   # 静止站立动画
 
-	$ProgressBar.max_value = maxHP
+	$ProgressBar.max_value = max_hp
 	# 起播静止动画。GameScene 不做动画点播（动画由角色自管），.tscn 里也没开 autoplay，
 	# 故这里必须自己播一次；否则 AnimatedSprite2D 只显示默认动画的第 0 帧然后定格。
 	play_anim(rest_anim)
@@ -22,8 +22,8 @@ func _ready():
 func _process(delta: float) -> void:
 	super._process(delta)   # 继承基类滑动推进（移动自滑由 Char._process 驱动）
 
-	$ProgressBar.value = HP
-	if HP == maxHP or HP == 0:
+	$ProgressBar.value = hp
+	if hp == max_hp or hp == 0:
 		$ProgressBar.visible = false
 	else:
 		$ProgressBar.visible = true
@@ -80,8 +80,17 @@ func pick_wander_target() -> Vector2i:
 			return c
 	return Vector2i(-1, -1)
 
+# 怪物类别取 MOB_PRIO（Actor 里的优先级表）：排在角色与 blob 之后、buff 之前。
+# 不覆盖 Char 赋好的 HERO_PRIO 就会与角色同刻到点时抢在角色前头。
+# super() 必须调：Char._init 与本行各管一层，漏了 super() 本行也不会执行（见 Actor.gd 注释）。
+func _init() -> void:
+	super()
+	act_priority = MOB_PRIO
+
 # 行动入口：只做感知，行为交给当前状态对象。
-# 契约同前——返回本次行动是否成立；时长由状态内的 spend 自记，兜底由调度器补 DUR_WAIT。
+# 契约同 Actor.act（见 Actor.gd）：时长由状态内的 spend 自记，再 return true 放行。
+# 注意下面两处早退返回 false 且不放锁——按新契约那是"世界于此停产"，只因拿不到场景/英雄才走到，
+# 正常局不可达；真到达就是终态停摆（调度器会 push_warning 指认）。
 func act() -> bool:
 	if game_scene == null:
 		return false
@@ -104,7 +113,8 @@ func act() -> bool:
 
 
 # ---------- 状态对象 ----------
-# 契约：act() 必须 spend 并返回 true。时间严格递增，否则调度器永远选中它，死循环。
+# 契约：act() 必须 spend 并返回 true（或 spend 后 next() 再返回 false）。
+# 不 spend 就放行，时间不递增，调度器会永远选中它、原地打转（见 Actor.gd 的 act() 契约注释）。
 # enemy_in_fov / just_alerted 由 Mob.act 算好传入；just_alerted 暂无使用者，保留备用。
 class AiState:
 	var mob = null   # 宿主，构造时注入

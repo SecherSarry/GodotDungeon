@@ -13,6 +13,9 @@ func _init(lvl: int = 0) -> void:
 func name() -> String:
 	return item_name if is_identified() else nickname[item_name]
 
+func is_upgradable() -> bool:
+	return false
+	
 func actions(hero: Hero):
 	return super(hero) + ["阅读"]
 
@@ -21,20 +24,23 @@ func execute(hero: Hero, action: String = default_action) -> void:
 	if action == "阅读":
 		# do_read 可能是协程（鉴定卷轴要等玩家在背包里点选一件物品），必须 await。
 		# 返回 false = 玩家取消：本次不成立，不记时、不消耗卷轴。
-		if await do_read(hero):
-			hero.spend(TIME_TO_READ)
+		if hero.has_buff(Blindness):
+			print("你失明了")
+		else:
+			await do_read(hero)
 
 # 返回"本次阅读是否成立"。子类覆写时取消/无法成立的分支 return false。
 func do_read(curUser: Char) -> bool:
 	return true
 
 func read_animation():
+	GameState.hero.spend(TIME_TO_READ)
 	pass
 
 static var nickname: Dictionary = {}
-var original_names = ["升级卷轴", "鉴定卷轴", "驱邪卷轴", "镜像卷轴", "充能卷轴", "传送卷轴", "催眠卷轴", "探地卷轴", "盛怒卷轴", "复仇卷轴", "恐惧卷轴", "嬗变卷轴"]
-var fake_names = ["KAUNAN卷轴", "SOWILO卷轴", "LAGUZ卷轴", "YNGVI卷轴", "GYFU卷轴", "RAIDO卷轴", "ISAZ卷轴", "MANNAZ卷轴", "NAUDIZ卷轴", "BERKANAN卷轴", "ODAL卷轴", "TIWAZ卷轴"]
-func init_nickname():
+static var original_names = ["升级卷轴", "鉴定卷轴", "驱邪卷轴", "镜像卷轴", "充能卷轴", "传送卷轴", "催眠卷轴", "探地卷轴", "盛怒卷轴", "复仇卷轴", "恐惧卷轴", "嬗变卷轴"]
+static var fake_names = ["KAUNAN卷轴", "SOWILO卷轴", "LAGUZ卷轴", "YNGVI卷轴", "GYFU卷轴", "RAIDO卷轴", "ISAZ卷轴", "MANNAZ卷轴", "NAUDIZ卷轴", "BERKANAN卷轴", "ODAL卷轴", "TIWAZ卷轴"]
+static func init_nickname():
 	fake_names.shuffle()
 	for i in range(0, original_names.size()):
 		nickname[original_names[i]] = fake_names[i]

@@ -3,8 +3,8 @@ class_name Char
 
 var grid_pos: Vector2i = Vector2i.ZERO
 
-var maxHP: int = 10
-var HP: int = 10
+var max_hp: int = 10
+var hp: int = 10
 
 var base_speed: float = 1.0
 
@@ -12,6 +12,7 @@ var paralysed: int = 0
 var rooted: bool = false
 var flying: bool = false
 var invisible: int = 0
+
 
 enum Alignment{
 	ENEMY,
@@ -25,6 +26,15 @@ var FOV = []
 
 var buffs: Dictionary = {}
 
+# 角色类别取 HERO_PRIO（Actor 里的优先级表）：与怪物同刻到点时角色先动。
+# Hero 不再自赋——它没有 _init，直接继承本处；Mob 覆写 _init 时以 super() 调到这里再改成 MOB_PRIO。
+# 本类若被新子类带 _init 地继承，那个子类必须调 super()，否则本行不执行（见 Actor.gd 注释）。
+func _init() -> void:
+	act_priority = HERO_PRIO
+
+func act() -> bool:
+	return false
+	
 func name() -> String:
 	return " "
 
@@ -36,7 +46,7 @@ func hit_sound():
 
 const MOVE_DURATION = 0.1   # 单格滑动时长（秒），由角色自驱逐帧插值推进
 
-# base_speed / next_action_time / spend / act / DUR_* 已上移到 Actor：
+# base_speed / time / spend / act / DUR_* 已上移到 Actor：
 # Buff 与角色共用同一套调度刻度，故这些必须落在共同基类上。
 
 
@@ -112,7 +122,23 @@ func _process(delta: float) -> void:
 # ---------- 移动：逻辑即时提交 grid + 启动自滑，立即返回，不等待动画（并行移动不阻塞回合） ----------
 func walk_to(target: Vector2i) -> bool:
 	var gs = game_scene
-	if gs == null or not MapManager.is_walkable(target) or MapManager.is_occupied(target, self):
+	if gs == null or MapManager.is_occupied(target, self):
+		return false
+	var step = target - grid_pos
+
+	# 上锁的门：单独花一回合解锁，这一步只解锁、不挪窝（调用方见 true 即 spend）。
+	# 正交相邻才解锁——隔着格子或斜着都够不着门锁。
+	if MapManager.is_locked_door(target):
+		if absi(step.x) + absi(step.y) == 1 and MapManager.unlock_door(target):
+			set_facing(step)
+			return true
+		return false
+
+	# 关着的门：开门不单独计回合，顺手打开，紧接着照常走进去——开门与迈步并作一步。
+	# 目标是别的格子时 open_door 是 no-op。
+	MapManager.open_door(target)
+
+	if not MapManager.is_walkable(target):
 		return false
 	var delta = target - grid_pos
 	set_facing(delta)
@@ -196,6 +222,18 @@ func fieldofview() -> void:
 	var origin := grid_pos
 	if origin.x < 0 or origin.x >= LevelManager.MAP_WIDTH or origin.y < 0 or origin.y >= LevelManager.MAP_HEIGHT:
 		return
+
+	# 失明：正常阴影投射整个跳过，只留贴身一圈。
+	# 对应 SPD Level.updateFieldOfView——那边把 sighted 判成 false 后 BArray.setFalse 清空 FOV，
+	# 再用 sense 兜底扫一圈，失明时 sense 起手就是 1。远处置暗、脚下仍亮，不至于彻底失去参照。
+	# 收窄只做在这一处就够：FOV 是「此刻看得见什么」的单一真相源，怪物/物品可见性与迷雾层都读它，
+	# 于是「失明的怪看不见远处的敌人」也自动成立（Mob.can_see 读的正是它自己这份 FOV）。
+	# 灵视不受影响：它不是视觉，是另加的一层感知，在 GameScene._reveal_by_mind_vision 里叠加，
+	# 原版同理——失明只掐掉阴影投射，不减 sense 里 MindVision 给的半径。
+	if has_buff(Blindness):
+		reveal_around([origin], 1)
+		return
+
 	FOV[origin.y][origin.x] = true
 
 	for o in _OCTANTS:
@@ -299,6 +337,9 @@ func attack(enemy: Char, dmg_multi: float = 1.0, dmg_bonus: float = 0.0, acc_mul
 		var dr: int = enemy.dr_roll()
 		var dmg: float = damage_roll() * dmg_multi + dmg_bonus
 		
+		if has_buff(Weakness):
+			dmg *= 0.67
+		
 		var effective_damage: int = enemy.defenseProc(self, roundi(dmg))
 		
 		if effective_damage >= 0:
@@ -321,6 +362,11 @@ func attack(enemy: Char, dmg_multi: float = 1.0, dmg_bonus: float = 0.0, acc_mul
 
 # 战斗步骤二：命中检定（acc_multi 缩放攻方命中值；magic 预留给法术命中）
 func hit(attacker: Char, defender: Char, acc_multi: float, magic: bool) -> bool:
+	# 直译 SPD Char.hit 开头：`if (defender instanceof Hero && ((Hero) defender).damageInterrupt) interrupt();`
+	# —— 英雄正走在半路时被挨一下，就地停下等玩家决策，而不是埋头走到底。
+	# 不写 `defender is Hero`：Char 静态引用子类 Hero 会绕成解析环（同 Mob.gd:37）。
+	# 故 damage_interrupt / interrupt() 这对钩子开在基类上，非英雄那侧恒为假、空实现。
+
 	# 战斗步骤三：预修正
 	var acu_stat: float = attacker.get_attack_skill(defender)
 	var def_stat: float = defender.get_defense_skill(attacker)
@@ -358,13 +404,18 @@ func attackProc(enemy: Char, damage: int) -> int:
 func defenseProc(enemy: Char, damage: int) -> int:
 	return damage
 
+func speed() -> float:
+	var speed: float = base_speed
+	if get_buff(Haste) != null: speed *= 3.0
+	return speed
+	
 # 战斗步骤七：承受伤害	
 func damage(dmg: int, src = null):
 	if !is_alive() or dmg<0:
 		return
 	if (self.has_buff(MagicalSleep)):
 		self.get_buff(MagicalSleep).detach()
-	HP = max(HP - dmg, 0)
+	hp = max(hp - dmg, 0)
 	# 受击自反应（非致死一击；致死那下交给 destory 播 die，避免动画重叠）
 	if is_alive():
 		on_hit()
@@ -381,7 +432,7 @@ func destory():
 	if _dying:
 		return
 	_dying = true
-	HP = 0
+	hp = 0
 	var is_monster := is_in_group("monster")
 	if is_monster:
 		TurnManager.monsters.erase(self)   # 立刻移出行动列表，避免死亡动画期间再被调度
@@ -403,7 +454,7 @@ func die( src = null ):
 var death_marked: bool = false
 
 func is_alive() -> bool:
-	return HP>0 or death_marked
+	return hp>0 or death_marked
 	
 func is_active() -> bool:
 	return is_alive()
@@ -436,22 +487,57 @@ func all_buffs() -> Array:
 	return buffs.values()
 
 # 时间轴归零（换层等场合：让玩家先动）。
-# buff 必须同步减去同一个量，而不是各自归零：buff 的 next_action_time 兼作到期时刻
+# buff 必须同步减去同一个量，而不是各自归零：buff 的 time 兼作到期时刻
 # （attach 时锚定在宿主时间轴上再叠加时长），归零等于把剩余时长一并抹掉，灵视这类
 # 限时 buff 会当场到期。减去 elapsed 只是平移坐标原点，剩余时长原样保留。
+# 全局 now 也得跟着归零：cooldown 是 time - now，只把本 actor 搬到 0 而 now 留着旧值，
+# 换层瞬间 buff 栏会显示成负的（原版换层时 Actor.clear() 正是把 now 置 0，这里照办；
+# 顺带使"now == 0 表示刚载入新层"这个原版哨兵（Hero.java 里用来补处理搜索类 buff）重新成立）。
 func reset_timeline() -> void:
-	var elapsed: float = next_action_time
-	next_action_time = 0.0
+	var elapsed: float = time
+	time = 0.0
+	Actor.now = 0.0
 	for buff in all_buffs():
-		buff.next_action_time -= elapsed
+		buff.time -= elapsed
+
+# 把本角色连同身上 buff 整体平移到以 now 为原点。直译 SPD Actor.clearTime：
+#   spendConstant(-Actor.now()); for (Buff b : buffs()) b.spendConstant(-Actor.now());
+# 与 reset_timeline 的区别只在平移量（原版按 now，本函数；换层那处按自身 time，为了落到 0）。
+# 原版把它放在 Actor 上（那边用 instanceof Char 分支处理 buff），本工程下沉到 Char：
+# Actor 若静态引用 Char，会与 Char extends Actor 构成解析环（同 Buff.gd 顶部那条注释）。
+func clear_time() -> void:
+	spend_constant(-Actor.now)
+	for buff in all_buffs():
+		buff.spend_constant(-Actor.now)
 
 func spend(time: float) -> void:
 	var time_scale: float = 1.0
 	
 	super.spend(time / time_scale)
 
+
+# 打断当前动作的钩子（原版 Hero.interrupt）。空实现开在基类：Char.hit 要调它，
+# 而那里不能把 defender 静态判成 Hero（成环）。非英雄没有"待办动作"可打断，空实现即正确。
+# 真正的实现见 Hero.interrupt。
+func interrupt() -> void:
+	pass
+
+# 物品动作收尾（InventoryUI 在 `await item.execute(...)` 之后调）。
+# 原版对应物是"动画播完后 sprite 回调 actor.next()"：那边 readAnimation() 里
+# curUser.spend(TIME_TO_READ); curUser.busy(); sprite.read(); 播完才由 sprite 放锁。
+# 本工程没有 busy/sprite 回调这一层，spend 已由物品自己记（见 Item.gd 顶部注释），
+# 故这里只剩两件事：放锁（next）+ 唤醒调度器（process）——等价于 sprite 播完那一下。
+# 锁在 process() 停产时留在英雄身上（英雄空闲正是持锁态），故 next() 必然命中。
+
 func on_attack_complete():
 	next()
 	
 func on_operate_complete():
 	next()
+
+func resist(effect) -> float:
+	var result: float = 1.0
+	
+	#元素之戒
+	return result
+	

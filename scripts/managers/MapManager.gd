@@ -18,6 +18,48 @@ func is_occupied(cell: Vector2i, exclude: Actor = null) -> bool:
 	return false
 
 
+## 该格是不是一扇"关着的门"。开门不额外耗回合，是走进去的附带动作。
+func is_door(cell: Vector2i) -> bool:
+	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
+		return false
+	return LevelManager.map_data[cell.y][cell.x] == Terrain.DOOR
+
+
+## 把关着的门改成开着的门。成功返回 true；不是门（含上锁门）返回 false。
+func open_door(cell: Vector2i) -> bool:
+	if not is_door(cell):
+		return false
+	LevelManager.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
+	return true
+
+
+## 把开着的门关回去。成功返回 true；不是开着的门返回 false。
+## 只改地形，不管"门格上有没有东西"——那是场景侧的事，由调用方先判定（见 GameScene.close_door_behind）。
+func close_door(cell: Vector2i) -> bool:
+	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
+		return false
+	if LevelManager.map_data[cell.y][cell.x] != Terrain.OPEN_DOOR:
+		return false
+	LevelManager.map_data[cell.y][cell.x] = Terrain.DOOR
+	return true
+
+
+## 该格是不是一扇上锁的门。解锁要单独花一回合（见 Char.walk_to）。
+func is_locked_door(cell: Vector2i) -> bool:
+	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
+		return false
+	return LevelManager.map_data[cell.y][cell.x] == Terrain.LOCKED_DOOR
+
+
+## 给上锁的门解锁：直接变成开着的门。解锁本身耗一回合，由调用方 spend。
+## 暂无钥匙系统——"必须要钥匙"的判定留给以后接在这里。
+func unlock_door(cell: Vector2i) -> bool:
+	if not is_locked_door(cell):
+		return false
+	LevelManager.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
+	return true
+
+
 ## 返回一个随机可走且未被占用的空位；找不到返回 (-1, -1)
 func get_random_empty_cell() -> Vector2i:
 	for i in 200:
@@ -79,18 +121,11 @@ func build_passable(exclude: Char = null, explored_only: bool = true) -> PackedB
 
 
 # ---------- 投掷落点 ----------
+## 投掷落点。交给 Ballistica 解——原版 Item.throwPos 就是
+## `new Ballistica(user.pos, dst, Ballistica.PROJECTILE).collisionPos`，一字对应。
+## 别改回自己数格子：格子序列本身与 Ballistica 不同（见 Ballistica.gd 顶部），落点会偏。
 func throw_landing_cell(from: Vector2i, to: Vector2i) -> Vector2i:
-	var landing := from
-	var line = get_line(from, to)
-	for i in range(1, line.size()):
-		var c: Vector2i = line[i]
-		if is_occupied(c):
-			landing = c
-			break
-		if not is_walkable(c):
-			break
-		landing = c
-	return landing
+	return Ballistica.new(from, to).collision
 
 
 # ---------- 传送 ----------
@@ -128,29 +163,3 @@ func record_sight(grid: Array) -> void:
 		for x in LevelManager.MAP_WIDTH:
 			if grid[y][x]:
 				LevelManager.explored[y][x] = true
-
-
-# ---------- Bresenham 画线 ----------
-func get_line(from: Vector2i, to: Vector2i) -> Array:
-	var points = []
-	var x0 = from.x
-	var y0 = from.y
-	var x1 = to.x
-	var y1 = to.y
-	var dx = abs(x1 - x0)
-	var dy = abs(y1 - y0)
-	var sx = 1 if x0 < x1 else -1
-	var sy = 1 if y0 < y1 else -1
-	var err = dx - dy
-	while true:
-		points.append(Vector2i(x0, y0))
-		if x0 == x1 and y0 == y1:
-			break
-		var e2 = 2 * err
-		if e2 > -dy:
-			err -= dy
-			x0 += sx
-		if e2 < dx:
-			err += dx
-			y0 += sy
-	return points

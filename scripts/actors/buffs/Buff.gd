@@ -9,11 +9,23 @@ var target: Char = null
 enum buff_type{POSITIVE, NEGATIVE, NEUTRAL}
 var type: buff_type = buff_type.NEUTRAL
 
-# 早于宿主结算：否则英雄行动时读到的还是上一轮的状态。
-# 与宿主 next_action_time 持平时由调度器比这个值，故 buff 必然先被调度。
-# 用虚方法覆写而非 _init 赋值：子类写自己的 _init 设时长时不必记得 super()。
-func get_act_priority() -> int:
-	return -30
+var announced: bool = false
+
+var revive_persists: bool = false
+
+# 晚于宿主结算：BUFF_PRIO，与 SPD 同值（"buffs act last in a turn"）。
+# 角色取 HERO_PRIO，数值大者先动，故 buff 恒排在宿主之后。
+# "限时 buff 显示 20 就真是 20 回合"由两处共同保证：这里让 buff 与宿主同时到点时宿主先动，
+# 宿主能动满整个时长；另一半是显示时取 visualcooldown（下方），即 cooldown + 1。
+# 覆写 _init 的子类必须调 super()，否则这一行不执行、优先级静默退回 DEFAULT（见 Actor.gd 注释）。
+func _init() -> void:
+	act_priority = BUFF_PRIO
+
+# 剩余回合数（供显示）。直译 SPD Buff.java 的 visualcooldown：`cooldown() + 1f`。
+# 为什么 +1：buff 排在宿主之后结算，轮到它时 cooldown 已经扣掉一回合，
+# 不补一回合的话"还剩 3 回合"会在第 3 回合直接消失，看着少一回合（SPD 原注释同此意）。
+func visualcooldown() -> float:
+	return cooldown() + 1.0
 
 # 参数不叫 target：那是成员变量名，同名会遮蔽。同上，不注解 Char 以避开循环依赖。
 func attach_to(buff_target: Char, duration: float = 1) -> bool:
@@ -29,21 +41,91 @@ func attach_to(buff_target: Char, duration: float = 1) -> bool:
 		queue_free()
 		return true
 
-	buff_target.add(self)
+	# 先落 target 再 add，与 SPD 同序；add 返回 false 必须复位并拒收——
+	#   if (target.add(this)) { ... return true; } else { this.target = null; return false; }
+	# Char.add 只在"同类键已存在"时返回 false，也就是同一实例被 attach_to 第二次；
+	# 不回退的话下面的锚点与 spend 会把时长再叠一遍（本实例本来只是重复投递）。
 	self.target = buff_target
+	if not buff_target.add(self):
+		self.target = null
+		return false
 
-	# 先对齐宿主的时间轴，再叠加时长。否则 spend(duration) 是从本 buff 自己的 0 起算的
-	# 绝对时刻：宿主时钟早已越过它时，buff 会在下一次调度立刻到期——表现为"喝药当场失效"，
+	# 先把锚点挪到"当下"，再叠加时长。否则 spend(duration) 是从本 buff 自己的 0 起算的
+	# 绝对时刻：时钟早已越过它时，buff 会在下一次调度立刻到期——表现为"喝药当场失效"，
 	# 且越到游戏后期越明显（只有开局时钟为 0 时才碰巧接近满时长）。
-	self.next_action_time += buff_target.next_action_time
+	# 锚点用全局 now 而非宿主的 time：原版走的是 Char.add → Actor.add(buff) → add(buff, now)，
+	# 也就是 `buff.time += now`，本 buff 因此成为时间轴上的独立 actor，到期时刻从"当下"起算。
+	# 宿主当下正在行动时 now 恰等于宿主 time，两者一致；宿主闲着时（例如英雄给怪物挂 debuff）
+	# 才会分叉——那时按宿主 time 会把到期时刻拖到怪物下一次行动之后，比原版晚。
+	self.time += Actor.now
 	if duration != 0:
 		self.spend(duration)
 
 	return true
 
-# 干净退场：此前只能由外部直接动 Char.buffs
+# 干净退场：此前只能由外部直接动 Char.buffs。
+# 直译 SPD Buff.java：`if (target.remove(this)) ...`——**不把 target 置空**。
+# 原版只在 attach_to 的失败路径（target.add 返回 false）才把 target 复位为 null，detach 不碰它。
+# 置空看着"更干净"，代价却摊派给所有子类：MagicalSleep.detach 开头要读 target.paralysed、
+# WellFed.act 要在 detach 前先存一份宿主——每个子类都得记住这条，且二次 detach 会当场崩。
+# remove 本身幂等（Char.remove 里 `buffs.get(key) != buff` 一判即返回 false），故不必靠置空防重复。
+#
+# queue_free 是原版没有的一行：Java 侧 buff 是普通对象、脱离 Char.buffs 后由 GC 回收；
+# GDScript 的 Node 不是引用计数对象，只从字典里移除等于永久泄漏（NodeDB 退出时一片 leaked）。
+# 故在此显式释放，等价于原版"detach 之后这个对象就该没了"的语义。
+# 开头的幂等守卫挡住二次 detach 对已释放实例的操作——原版靠 GC 不会遇到，我们必须自己挡。
 func detach() -> void:
+	if is_queued_for_deletion():
+		return
 	if target != null:
 		target.remove(self)
-	target = null
+	queue_free()
 	
+func name() -> String:
+	return self.get_script().get_global_name()
+
+func desc() -> String:
+	# 剩余回合走 visualcooldown（cooldown + 1），不再手写 time - target.time。
+	# 二者在"宿主刚行动过"时数值相同，但 target.time 只是宿主的下次行动时刻，
+	# 而 cooldown 用的是全局 now——轮到别人行动时看 buff 列表，前者会偏。
+	return str(visualcooldown())
+
+# 新建实例并挂上，不预支时长。直译 SPD Buff.java 的 append(target, buffClass)：
+#   T buff = Reflection.newInstance(buffClass); buff.attachTo(target); return buff;
+# duration 必须显式传 0：attach_to 的默认值是 1，会让 buff 的时间落到 now+1，
+# 与"刚行动完的宿主"（now + 它这一拍）**恰好平局**，再被宿主的更高优先级压掉——
+# 宿主 act() 返回 false 即 break 整个回合循环，本 buff 这一轮根本轮不到，要等下一回合。
+# 治疗药剂走这条路：喝了不立刻回血、要再动一下才结算，就是这个 1 造成的。
+# 0 表示"只把锚点对齐到当下"，正是 SPD attachTo 的语义（那边根本不 spend）。
+static func append(target: Char, buff_class):
+	var buff: Buff = buff_class.new()
+	buff.attach_to(target, 0)
+	return buff
+
+# 挂 buff 的统一入口。直译 SPD Buff.java 那对 affect 重载——Java 靠重载，
+# GDScript 没有重载，故合并成一个带默认值的 duration：
+#   affect(target, cl)          → 只挂，不预支时长
+#   affect(target, cl, duration)→ 挂上后再 spend(duration)
+# 语义要点两条：
+#  1. 同类已在场就复用、不新建（首次挂载的副作用不重跑），交给调用方直接拿到"真正生效的那一个"。
+#  2. duration 的预支发生在**取到实例之后**（spend 在 return 前那步），所以续期时是加在在场的那个身上。
+# 调用方一律走本函数，别再手写 X.new().attach_to(...)：那样会各自决定要不要传时长、
+# 传了又会撞上平局（见 append 的注释），且同类已存在时拿到的是被回收的信使实例。
+static func affect(target: Char, buff_class, duration: float = 0):
+	var buff: Buff = target.get_buff(buff_class)
+	if buff == null:
+		buff = append(target, buff_class)
+	if duration != 0:
+		buff.spend(duration)
+	return buff
+	
+static func prolong(target: Char, buff_class, duration):
+	var buff: Buff = affect(target, buff_class)
+	buff.postpone(duration)
+		
+static func do_detach(target: Char, buff_class):
+	var b = target.get_buff(buff_class)
+	if b == null:
+		return
+	else:
+		b.detach()

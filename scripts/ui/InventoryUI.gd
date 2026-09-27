@@ -11,8 +11,9 @@ var game_scene: Node = null
 var selected_source: String = ""
 var selected_index: int = -1
 
-# 选物模式：由 GameScene.select_item 开启。开着时点背包项不再建动作按钮，
+# 选物模式：由 GameScene.select_item 开启。开着时点物品不再建动作按钮，
 # 而是直接把物品交回（item_chosen）；Esc/右键取消（selection_cancelled）。
+# 背包与装备栏两边都认（原版 WndBag 的格子本就含 5 个装备槽）。
 var selecting: bool = false
 
 # 选物模式的结果通道，与 TileSelector 的 confirmed/cancelled 同构，由 GameScene 桥接。
@@ -59,13 +60,8 @@ func refresh():
 
 func _label(item: Item, slot: int = -1) -> String:
 	if item == null:
-		# 空槽也占一行，保持列表下标与 belongings 下标一致；0=武器槽、1=护甲槽
-		return "无武器" if slot == 0 else "无护甲"
-	var text = item.name()
-	if item.level() > 0 and item.level_known:
-		text += "+" + str(item.level())   # 有等级才显示：0 级不缀 +0
-	if item.stackable and item.item_quantity > 1:
-		text += " x" + str(item.item_quantity)
+		return "无"
+	var text = item.title()
 	return text
 
 # ---------- 选中：两列表互斥 ----------
@@ -91,13 +87,21 @@ func _on_bag_selected(index: int):
 	_build_buttons(_current_item())
 
 func _on_equip_selected(index: int):
-	if selecting:
-		_deselect_all(belongings_list)   # 选物模式只认背包，装备槽点了不算
-		return
 	_deselect_all(item_list)
 	selected_source = "equip"
 	selected_index = index
-	_build_buttons(_current_item())
+	var item = _current_item()
+	if item == null:
+		# 空槽（标签"无"）不是物品：正常模式下没有可执行的动作可建；
+		# 选取模式下更不能往下走——item_chosen 递 null 会被 GameScene 解读成"取消"。
+		# 清掉这次高亮即可。（原版对应物是 Placeholder，itemSelectable 一律判否，同样不可选。）
+		_reset_selection()
+		return
+	if selecting:
+		selecting = false   # 装备槽与背包同权：原版 WndBag 把 5 个装备槽摆在格子最前，照样可点选
+		item_chosen.emit(item)
+		return
+	_build_buttons(item)
 
 # 当前选中项的实际 Item（按来源取）；无效返回 null
 func _current_item() -> Item:
@@ -138,5 +142,5 @@ func _on_action_pressed(action: String):
 	if hero == null:
 		return
 	await item.execute(hero, action)
-	hero.on_operate_complete()
+	await hero.on_operate_complete()   # 放锁 + 驱动调度器；等它走完再刷列表，否则列表会在怪行动中途重建
 	refresh()   # 动作可能改变背包/装备（用量/移除/换装），重建列表与按钮

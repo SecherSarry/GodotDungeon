@@ -28,27 +28,16 @@ func dr_min(lvl: int = buffed_lvl()) -> int:
 	else:
 		return lvl
 
-func execute(hero: Hero, action: String = default_action) -> void:
-	if action == "装备":
-		do_equip(hero)
-		detach()
-		hero.spend(TIME_TO_EQUIP)
-	elif action == "脱下":
-		do_unequip(hero)
-		hero.spend(TIME_TO_UNEQUIP)
-	else:
-		await super(hero, action)   # 放下/扔出由基类处理
-
-func is_equipped(hero: Hero) -> bool:
-	return hero.armor == self
-
+# 装备全流程。直译 SPD Armor.doEquip（Armor.java:232）：
+#   先 detach(backpack) 把本件从背包取出 → 再让旧甲 doUnequip(hero, true, false) 回包 →
+#   写槽 → 最后 hero.spend(timeToEquip(hero))。
+# 本子类与 MeleeWeapon 只在**槽位名**上不同（hero.armor vs hero.weapon）：
+# 取件、旧件回包、记时三件都由 EquipableItem 的 do_unequip / TIME_TO_EQUIP 承担。
+# 原版 Armor.doEquip 里还有纹章（BrokenSeal）与 HeroSprite 换装的收尾，本工程两样都没有。
 func do_equip(hero: Hero):
+	detach()   # 装备即离包
 	if hero.armor != null:
-		hero.armor.do_unequip(hero)   # 旧甲回包
+		hero.armor.do_unequip(hero)   # 旧甲回包（扫 belongings 找自己、清槽、入包，并记旧件那次脱下耗时）
 	hero.armor = self                 # 护甲槽 = 本件（写入 belongings[1]）
+	hero.spend(TIME_TO_EQUIP)
 
-func do_unequip(hero: Hero):
-	if hero.armor != null:
-		Bag.add_item(hero.armor)
-	hero.armor = null   # 空甲槽用 null 表示（武器侧同样用 null）
-	

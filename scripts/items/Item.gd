@@ -29,9 +29,6 @@ var bones: bool = false
 
 var item_name: String = "未知物品"
 
-func name() -> String:
-	return item_name
-
 func actions(hero: Hero):
 	var actions = ["放下", "扔出"]
 	return actions
@@ -46,45 +43,76 @@ func do_pickup(hero: Hero, pos: Vector2i = hero.grid_pos) -> bool:
 
 # 放下：整摞落在自己脚下。取出归本类（detach_all），摆位归场景；
 # 目标格就是英雄所在格，距离 0，场景的飞行动画自然跳过。
+# 直译 SPD Item.doDrop（Item.java:138-142）：原版是
+# `spendAndNext(TIME_TO_DROP); int pos = hero.pos; Dungeon.level.drop(detachAll(backpack), pos)`。
+# 原版不判取出结果——detachAll 取不到就返回自己（见下），"装备中刚脱下"的那件正是靠这条落地。
+# 本工程比原版多一层 gs.drop 的返回值判定（不在玩家回合则整件事作废），故记时挪到 drop 成功之后。
 func do_drop(hero: Hero):
 	var gs = hero.game_scene
 	if gs == null:
 		return
 	var stack: Item = detach_all()
-	if stack == null:
-		return   # 已不在包里：本次不成立
 	if await gs.drop(stack, hero.grid_pos):
 		hero.spend(TIME_TO_DROP)
 		
 
-# 扔出：选格 → 算落点 → 摆位，三步都在本函数里看得见。
-# 选格：预览框由 select_cell 按种类内部切换，本类不必知道有哪些预览。
-# 落点：选中格只是"想扔到哪"，沿直线可能被墙或敌人挡住，故由 MapManager 折算出实际落点。
-# 取出（detach）放在选格之后——取消时不该动背包。
+# 扔出第一步：选落点。直译 SPD Item.doThrow（Item.java:153-155）——原版整个函数就一句
+# `GameScene.selectCell(thrower);`，选中格之后才由那个回调调 cast（见下）。
+# 本工程把回调换成 await：select_cell 是协程，选中格与取消都由它返回，
+# 于是本函数正好是"选格 → 交给 cast"两句，与 SPD 的两段一一对应。
 # 选格要点鼠标、跨帧，故本函数是协程，execute 必须 await，否则回合会先于投掷被推进。
+#
+# 取消（(-1,-1)）时**什么都不做**，对应原版 thrower 里那句 `if (target != null) curItem.cast(...)`
+# （Item.java:715-719）：原版取消时 target 为 null，整个分支不进，物品分毫未动。
+# 这条"取消不产生副作用"正是下一段 cast 必须单独存在的原因——脱装备挂在其上，不能提前到这里。
 func do_throw(hero: Hero):
 	var gs = hero.game_scene
 	if gs == null:
 		return
 	var target = await gs.select_cell(hero.grid_pos, "throw")
 	if target == Vector2i(-1, -1):
-		return   # 取消：什么都没取出，不记时、不推进回合
+		return   # 取消
+	await cast(hero, target)
+
+# 扔出第二步：真正脱手并落地。直译 SPD Item.cast（Item.java:639-697）。
+# 与 SPD 逐句对照，被略去的都在原版有对应物、本工程无：
+#   user.sprite.zap(cell) / throwSound() —— 出手动作与音效；本工程的飞行动画由
+#     gs.drop 内的 _animate_throw 承担（GameScene.gd:713-729）。
+#   Char enemy = Actor.findChar(cell); QuickSlotButton.target(enemy) —— 命中判定与快捷栏。
+#   MissileSprite 回调 —— 原版把"取出 + onThrow + 推进回合"整个放进飞行动画播完的回调；
+#     本工程 gs.drop 自己就是"飞行 + 落地"的 await，故 detach 留在它前面，
+#     两句之间的先后与原版一致（那边也只隔了一个回调边界，中间没有别的动作）。
+#   castDelay(user, cell) —— 本工程固定 TIME_TO_THROW。
+#   落点：原版是 throwPos（Ballistica 弹道），本工程是 MapManager.throw_landing_cell，同职。
+func cast(user: Hero, dst: Vector2i) -> void:
 	var thrown: Item = detach()   # 可堆叠只扣 1，拿到的才是要落地的那份
 	if thrown == null:
-		return   # 已不在包里：本次不成立
-	var landing = MapManager.throw_landing_cell(hero.grid_pos, target)
-	if await gs.drop(thrown, landing):
-		hero.spend(TIME_TO_THROW)
+		return
+	var landing = MapManager.throw_landing_cell(user.grid_pos, dst)
+	if await user.game_scene.drop(thrown, landing):
+		user.spend(TIME_TO_THROW)
 		
 
 # 执行一个动作。职责三分：子类只管"效果 + 消耗（consume）"，本类管"从背包取出"
 # （detach / detach_all），世界摆位（选格、算落点、飞行、落地）一律委托 hero.game_scene。
 # 回合推进不归物品层：InventoryUI 在 execute 返回后调 hero.on_operate_complete() 推一次，
 # 物品层若再 next() 就是同一动作的双重推进。
-# 场景返回 false（取消/已不在包里）则本次不算数：不记时、不推进回合。
+# 场景返回 false（不在玩家回合）则本次不算数：不记时、不推进回合。
 # 子类覆写 execute 时，自己的动作分支自行 spend，其余 `await super(hero, action)`。
 func execute(hero: Hero, action: String = default_action) -> void:
 	if hero == null:
+		return
+	# 准入判据，直译 SPD Item.execute（Item.java:163-175）：
+	#   `if (hero.belongings.backpack.contains(this) || isEquipped(hero)) doDrop(hero);`
+	# 原版两个分支各判一次，本工程合并到 match 之前——判据相同，写两遍只多一次查找。
+	# 这道闸是必需的：detach / detach_all 改成"取不到就返回自己"之后（见下），它们不再是守卫，
+	# 没有这一句，一件既不在包也不在槽里的物品（比如已扔到地上的那件）仍会被
+	# do_drop / do_throw 当成有效目标走完全流程，凭空多出一份落在地上。
+	#
+	# 原版 execute 开头还有 `GameScene.cancel(); curUser = hero; curItem = this;`。
+	# 本工程无 cancel；那两个静态字段也不需要——原版存它们是因为选格回调（Item.java:713-724）
+	# 拿不到参数，本工程用 await 把参数一路传下去（见 do_throw → cast）。
+	if not (Bag.get_inventory().has(self) or is_equipped(hero)):
 		return
 	match action:
 		"放下":
@@ -97,6 +125,23 @@ func identify(by_hero: bool = true) -> Item:
 	cursed_known = true
 	return self
 	
+func title() -> String:
+	var name: String = name()
+	
+	if(visibly_upgraded() != 0):
+		name += " +" + str(visibly_upgraded())
+	
+	if(item_quantity > 1):
+		name += " x" + str(item_quantity)
+	
+	return name
+
+func name() -> String:
+	return true_name()
+
+func true_name() -> String:
+	return item_name
+
 func _init(lvl: int = 0) -> void:
 	item_level = lvl
 
@@ -116,23 +161,29 @@ func copy() -> Item:
 func collect() -> bool:
 	#这里检查背包
 	Bag.add_item(self)
-	print("拾取", name(), " x", item_quantity)
 	return true
 	
 # 从背包取出一件（投掷用）：可堆叠只扣 1、返回数量为 1 的副本，否则整件取出并返回。
-# 已不在包里返回 null，调用方据此判定本次动作不成立。
-# 与 consume 的区别：consume 只把物品弄没，本函数要把实例交出去（投掷需在场景里落地）。
+# **取不到就返回自己**（不动任何容器）——直译 SPD Item.detachAll 末尾那句
+# `updateQuickslot(); return this;`（Item.java:363-364），原版 detach(container) 也共用同一段兜底。
+# 这是原版刻意留的宽松语义，不是疏漏：装备中的物品被"脱下但不入包"地取出后不在任何容器里
+# （见 EquipableItem.do_unequip 的 collect=false），原版正是靠这条把**调用方手里的这件**交回去，
+# 放下/投掷才落得下去。
+# 本工程曾改成"取不到返回 null"，让它兼职 execute 的准入守卫；准入现已回到原版的位置
+# （见 Item.execute），这里必须恢复宽松——否则上面那条路径会把物品直接弄丢
+# （槽已清空、包没进、投掷又中止，实例只剩调用方一个引用）。
 func detach() -> Item:
 	var index = Bag.get_inventory().find(self)
 	if index < 0:
-		return null
+		return self
 	return Bag.remove_one(index)
 
 # 从背包取出整摞（放下用）：可堆叠一次全取出，不可堆叠等同 detach。
+# 兜底同 detach（原版 detach 与 detachAll 共用同一段收尾）。
 func detach_all() -> Item:
 	var index = Bag.get_inventory().find(self)
 	if index < 0:
-		return null
+		return self
 	return Bag.remove_item(index)
 
 func level():
@@ -141,14 +192,38 @@ func level():
 func buffed_lvl() -> int:
 	return 0
 
-func is_identified():
+func upgrade() -> Item:
+	self.item_level += 1	
+	return self
+
+func upgradeN(n: int) -> Item:
+	for i in range(n):
+		upgrade()
+	return self
+	
+func degrade() -> Item:
+	self.item_level -= 1
+	return self
+	
+func degradeN(n: int) -> Item:
+	for i in range(n):
+		degrade()
+	return self
+	
+func is_upgradable() -> bool:
+	return true
+	
+func is_identified() -> bool:
 	return level_known and cursed_known
 	
-func is_equipped (hero: Hero):
+func is_equipped (hero: Hero) -> bool:
 	return false
 
+func visibly_upgraded() -> int:
+	return level() if level_known else 0
 
-
+func buffed_visibly_upgraded() -> int:
+	return buffed_lvl() if level_known else 0
 
 func quantity(value: int) -> Item:
 	self.item_quantity = value
