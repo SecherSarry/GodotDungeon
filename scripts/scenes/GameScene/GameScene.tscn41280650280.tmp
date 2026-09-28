@@ -3,11 +3,9 @@
 [ext_resource type="Script" uid="uid://d07qn4e7g0or6" path="res://scripts/scenes/GameScene/GameScene.gd" id="1_h42mu"]
 [ext_resource type="Texture2D" uid="uid://b7ll1ogseir1o" path="res://assets/tiles_sewers.png" id="2_coqjb"]
 [ext_resource type="Material" uid="uid://cmbcfxlkxxnwq" path="res://addons/TileMapDual/ghost_material.tres" id="3_8wagj"]
-[ext_resource type="Script" uid="uid://cpd4swkcrkmau" path="res://scripts/tiles/TerrainTileMapLayer.gd" id="3_coqjb"]
 [ext_resource type="Texture2D" uid="uid://cpqgkrvq4jgi0" path="res://assets/tileset_jess.png" id="4_hv17g"]
 [ext_resource type="Script" uid="uid://cjk8nronimk5r" path="res://addons/TileMapDual/tile_map_dual.gd" id="5_eaf51"]
 [ext_resource type="Texture2D" uid="uid://bq51pyq6xthu6" path="res://assets/FOV.png" id="6_m3eoi"]
-[ext_resource type="Script" uid="uid://brhymkuu20q4y" path="res://scripts/tiles/WallsTileMapLayer.gd" id="7_8wagj"]
 [ext_resource type="Script" uid="uid://dedhvkgxr2n4t" path="res://scripts/ui/InventoryUI.gd" id="7_jq3iw"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ax5cb"]
@@ -80,6 +78,7 @@ texture = ExtResource("2_coqjb")
 6:5/0 = 0
 7:5/0 = 0
 8:5/0 = 0
+8:5/0/terrain = 0
 9:5/0 = 0
 10:5/0 = 0
 11:5/0 = 0
@@ -557,11 +556,10 @@ script = ExtResource("1_h42mu")
 
 [node name="Layers" type="Node2D" parent="." unique_id=2065358022]
 
-[node name="TerrainTileMapLayer" type="TileMapLayer" parent="Layers" unique_id=1500780842]
+[node name="BedrockLayer" type="TileMapLayer" parent="Layers" unique_id=1500780842]
 texture_filter = 1
 tile_map_data = PackedByteArray("AAABAAAAAAAAAAAAAAACAAAAAAAAAAAAAAABAAEAAAAAAAAAAAACAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAMAAAAAAAAAAAABAAMAAAAAAAAAAAABAAIAAAAAAAAAAAACAAIAAAAAAAAAAAADAAIAAAAAAAAAAAACAAMAAAAAAAAAAAADAAMAAAAAAAAAAAADAAEAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAUAAAAAAAAAAAABAAUAAAAAAAAAAAABAAQAAAAAAAAAAAACAAQAAAAAAAAAAAACAAUAAAAAAAAAAAADAAUAAAAAAAAAAAAEAAUAAAAAAAAAAAAEAAQAAAAAAAAAAAADAAQAAAAAAAAAAAAEAAMAAAAAAAAAAAAEAAIAAAAAAAAAAAAEAAEAAAAAAAAAAAAEAAAAAAAAAAAAAAAFAAAAAAAAAAAAAAAFAAEAAAAAAAAAAAAFAAIAAAAAAAAAAAAFAAMAAAAAAAAAAAAFAAQAAAAAAAAAAAAFAAUAAAAAAAAAAAA=")
 tile_set = SubResource("TileSet_naftm")
-script = ExtResource("3_coqjb")
 
 [node name="WaterLayer" type="TileMapLayer" parent="Layers" unique_id=1535246956]
 texture_filter = 1
@@ -572,11 +570,10 @@ script = ExtResource("5_eaf51")
 godot_4_3_compatibility = false
 metadata/_custom_type_script = "uid://cjk8nronimk5r"
 
-[node name="WallsTileMapLayer" type="TileMapLayer" parent="Layers" unique_id=2062227814]
+[node name="WallLayer" type="TileMapLayer" parent="Layers" unique_id=2062227814]
 texture_filter = 1
 tile_map_data = PackedByteArray("AAACAAIAAAACAAkAAAADAAIAAAAAAAUAAAACAAMAAAACAAkAAAADAAMAAAAAAAUAAAAFAAIAAAAAAAUAAAAEAAIAAAAAAAUAAAAEAAMAAAAAAAUAAAAFAAQAAAAAAAUAAAACAAQAAAAAAAUAAAABAAQAAAAAAAUAAAAAAAQAAAADAAkAAAAAAAUAAAACAAkAAAAAAAMAAAAAAAkAAAAAAAIAAAAAAAkAAAABAAMAAAAAAAkAAAABAAIAAAAAAAkAAAA=")
 tile_set = SubResource("TileSet_ldck6")
-script = ExtResource("7_8wagj")
 
 [node name="FogLayer" type="TileMapLayer" parent="Layers" unique_id=1734379011]
 tile_set = SubResource("TileSet_av3mj")

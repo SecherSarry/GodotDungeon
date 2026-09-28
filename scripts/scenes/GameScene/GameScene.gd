@@ -1,8 +1,8 @@
 extends Node2D
 
-@onready var bedrock_layer = $Layers/BedrockLayer
+@onready var terrain_layer = $Layers/TerrainTileMapLayer
 @onready var water_layer = $Layers/WaterLayer
-@onready var wall_layer = $Layers/WallLayer
+@onready var walls_layer = $Layers/WallsTileMapLayer
 @onready var fog_layer = $Layers/FogLayer
 
 var hero: Hero:
@@ -210,8 +210,8 @@ func _on_talent_list_item_clicked(index: int, at_position: Vector2, mouse_button
 
 # ---------- 地图绘制 ----------
 func init_layers():
-	init_bedrock_layer()
-	init_wall_layer()
+	terrain_layer.update_all()
+	walls_layer.update_all()
 	init_water_layer()
 	init_foglayer()
 
@@ -230,76 +230,6 @@ func init_water_layer():
 		return
 	water_layer.set_cells_terrain_connect(water_cells, 0, 1)
 	
-func init_bedrock_layer():
-	for y in LevelManager.MAP_HEIGHT:
-		for x in LevelManager.MAP_WIDTH:
-			var pos = Vector2i(x, y)
-			var tile
-			if pos == LevelManager.hero_spawn:
-				tile = TILE_ENTRENCE   # 入口（上一层）
-			elif pos == LevelManager.exit_cell:
-				tile = TILE_EXIT       # 出口（下一层）
-			else:
-				match LevelManager.map_data[y][x]:
-					Terrain.CHASM:	tile = TILE_CHASM
-					Terrain.WATER:	tile = TILE_FLOOR
-					Terrain.EMPTY:	tile = TILE_FLOOR
-					Terrain.GRASS:	tile = TILE_GRASS
-					Terrain.DOOR:		tile = TILE_FLOOR   # 门按地面画（门墙渲染已从 get_wall_tile 移除）
-					Terrain.OPEN_DOOR:	tile = TILE_FLOOR
-					_:					tile = TILE_CHASM
-			bedrock_layer.set_cell(pos, 0, tile)
-
-func init_wall_layer():
-	for y in LevelManager.MAP_HEIGHT:
-		for x in LevelManager.MAP_WIDTH:
-			var pos = Vector2i(x, y)
-			var tile = get_wall_tile(x, y)
-			if tile != Vector2i(-1, -1): wall_layer.set_cell(pos, 0, tile)
-	pass
-
-func get_wall_tile(x: int, y: int) -> Vector2i:
-	# 门按地面渲染：整格不进墙体层，让 bedrock 铺的 TILE_FLOOR 透出来。
-	# 只在邻居表里除名不够——下面 !c 的分支是"脚下有墙就画墙顶"，门下面正好是岩壁，照样会给门格画上墙。
-	# LOCKED_DOOR 不在此列：它是走不过去的屏障，仍按墙画。
-	if LevelManager.map_data[y][x] == Terrain.DOOR or LevelManager.map_data[y][x] == Terrain.OPEN_DOOR:
-		return Vector2i(-1, -1)
-
-	var mask = 0
-	# 检测自己
-	var c = LevelManager.map_data[y][x] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-	
-	# 检测左
-	var l = x > 0 and LevelManager.map_data[y][x-1] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-
-	# 检测左下
-	var ld = x > 0 and y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x-1] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-
-	# 检测下
-	var d = y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-
-	# 检测右下
-	var dr = x < LevelManager.MAP_WIDTH - 1 and y < LevelManager.MAP_HEIGHT - 1 and LevelManager.map_data[y+1][x+1] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-
-	# 检测右
-	var r = x < LevelManager.MAP_WIDTH - 1 and LevelManager.map_data[y][x+1] in [Terrain.WALL, Terrain.LOCKED_DOOR, Terrain.CHASM]
-
-	if  c and 				 !d:				return Vector2i(0, 5)
-	if  c and  l and !ld and  d and !dr	:		return Vector2i(6, 9)
-	if  c and !l and !ld and  d and !dr:		return Vector2i(14, 9)
-	if  c and !l and  ld and  d and  dr and !r:	return Vector2i(9, 9)
-	if  c and !l and  ld and  d and !dr:		return Vector2i(10, 9)
-	if  c and !l and !ld and  d and  dr and !r:	return Vector2i(13, 9)
-	if  c and  						 dr and !r:	return Vector2i(1, 9)
-	if  c and !l and  ld:						return Vector2i(8, 9)
-	if  c and  l and !ld:						return Vector2i(4, 9)
-	if  c and !l and !ld:						return Vector2i(12, 9)
-	if  c and 						!dr:		return Vector2i(2, 9)
-	if !c and 		 !ld and  d and !dr:		return Vector2i(3, 12)
-	if !c and 		 !ld and  d and  dr:		return Vector2i(2, 12)
-	if !c and 		  ld and  d and !dr:		return Vector2i(1, 12)
-	if !c and 		  ld and  d and  dr:		return Vector2i(0, 12)
-	else: return Vector2i(-1, -1)
 		
 func init_foglayer():
 	for y in LevelManager.MAP_HEIGHT:
@@ -359,7 +289,7 @@ func update_items_visibility():
 # ---------- 放置英雄：实例化 Hero.tscn 后摆到 MapManager 决策的出生点并加入场景树 ----------
 func render_hero():
 	hero.grid_pos = LevelManager.hero_spawn
-	hero.position = bedrock_layer.map_to_local(hero.grid_pos)
+	hero.position = terrain_layer.map_to_local(hero.grid_pos)
 	hero.game_scene = self
 	hero.z_index = CHAR_Z   # 角色压在地面物品之上
 	add_child(hero)   # 触发 Hero._ready（init_hero 初始化属性）；摆位后才进树，无闪现
@@ -380,7 +310,7 @@ func render_monsters():
 	for cell in LevelManager.monster_cells:
 		var mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
 		mob.grid_pos = cell
-		mob.position = bedrock_layer.map_to_local(cell)
+		mob.position = terrain_layer.map_to_local(cell)
 		mob.game_scene = self
 		mob.z_index = CHAR_Z   # 角色压在地面物品之上
 		add_child(mob)
@@ -389,11 +319,11 @@ func render_monsters():
 # 世界服务：格子 → 屏幕像素（格中心）。移动目标像素供 Char.walk_to 取用，
 # 角色自身 _process 做并行自滑，这里不再包揽滑动动画。
 func cell_to_world(cell: Vector2i) -> Vector2:
-	return bedrock_layer.map_to_local(cell)
+	return terrain_layer.map_to_local(cell)
 
 # 一格像素尺寸（严格取自图块资源，当前 16×16）；供高亮框按格绘制
 func tile_pixel_size() -> Vector2:
-	return Vector2(bedrock_layer.tile_set.tile_size)
+	return Vector2(terrain_layer.tile_set.tile_size)
 
 
 # ---------- 是否轮到玩家行动 ----------
@@ -416,8 +346,25 @@ func set_hero_dead():
 		return
 	hero_dead = true
 	inventory_ui.clear_buttons()   # 死亡后清掉动作按钮（且动作本就被 is_player_turn 挡住）
+	clear_map()                    # 清场：地图四层 + 怪 + 地面物（英雄留在原地）
 	print("英雄死亡，游戏结束")
 	# TODO: 显示游戏结束界面
+
+# 死亡清场：四个瓦片层一律 clear，怪与地面物一并移除。
+# 数据（map_data / explored）不动——死亡不是换层，没有下家要读它。
+func clear_map():
+	terrain_layer.clear()
+	walls_layer.clear()
+	water_layer.clear()
+	fog_layer.clear()
+	for item_node in items_on_floor:
+		if is_instance_valid(item_node):
+			item_node.queue_free()
+	items_on_floor.clear()
+	for mob in TurnManager.monsters.duplicate():
+		if is_instance_valid(mob):
+			mob.queue_free()
+	TurnManager.monsters.clear()
 
 # ---------- 缩放 ----------
 func zoom_map(factor: float):
@@ -535,8 +482,8 @@ func rebuild_level(landing: Vector2i, restored: bool) -> void:
 			mob.queue_free()
 	TurnManager.monsters.clear()
 	# 重绘地图层（先清后画，否则残留上一层瓦片）
-	bedrock_layer.clear()
-	wall_layer.clear()
+	terrain_layer.clear()
+	walls_layer.clear()
 	water_layer.clear()
 	fog_layer.clear()
 	init_layers()
@@ -559,7 +506,7 @@ func _render_monsters_from(snapshot: Array) -> void:
 	for m in snapshot:
 		var mob: Mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
 		mob.grid_pos = m["cell"]
-		mob.position = bedrock_layer.map_to_local(m["cell"])
+		mob.position = terrain_layer.map_to_local(m["cell"])
 		mob.game_scene = self
 		add_child(mob)
 		mob.max_hp = m["max_hp"]
@@ -578,8 +525,8 @@ func _render_items_from(snapshot: Array) -> void:
 # ---------- 鼠标坐标 ----------
 func get_cell_from_mouse_pos() -> Vector2i:
 	var mouse_pos = get_global_mouse_position()
-	var local_pos = bedrock_layer.to_local(mouse_pos)
-	var tile_pos = bedrock_layer.local_to_map(local_pos)
+	var local_pos = terrain_layer.to_local(mouse_pos)
+	var tile_pos = terrain_layer.local_to_map(local_pos)
 	if tile_pos.x >= 0 and tile_pos.x < LevelManager.MAP_WIDTH and tile_pos.y >= 0 and tile_pos.y < LevelManager.MAP_HEIGHT:
 		return tile_pos
 	return Vector2i(-1, -1)
@@ -602,7 +549,7 @@ func create_floor_item(item_data: Item, cell: Vector2i):
 			return
 	var item_node = preload("res://tscns/Item.tscn").instantiate()
 	item_node.grid_pos = cell
-	item_node.position = bedrock_layer.map_to_local(cell)
+	item_node.position = terrain_layer.map_to_local(cell)
 	item_node.item_data = item_data
 	item_node.z_index = ITEM_Z   # 在角色之下、地面瓦片之上
 	add_child(item_node)

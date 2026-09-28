@@ -86,9 +86,9 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 	# 9. 放置物品
 	var items = place_items(map_data, rooms, entrance_room, depth, rng, occupied)
 
-	# 出入口强制为空地（可能被水/草/陷阱盖过）
-	map_data[entrance_pos.y][entrance_pos.x] = EMPTY
-	map_data[exit_pos.y][exit_pos.x] = EMPTY
+	# 出入口盖回各自的专属地形（前面可能被草/水/陷阱盖过）。ENTRANCE/EXIT 与 EMPTY 同为可走。
+	map_data[entrance_pos.y][entrance_pos.x] = ENTRANCE
+	map_data[exit_pos.y][exit_pos.x] = EXIT
 
 	return {
 		"map_data": map_data,
@@ -309,8 +309,8 @@ static func place_traps(map_data: Array, depth: int, rng: RandomNumberGenerator)
 			var x = randi_range(1, MAP_WIDTH - 2)
 			var y = randi_range(1, MAP_HEIGHT - 2)
 			if map_data[y][x] == EMPTY and rng.randf() < 0.5:  # 避免所有空地都放陷阱
+				map_data[y][x] = Terrain.TRAP
 				traps.append(Vector2i(x, y))
-				# 可选：在地图上标记陷阱类型，这里简化为占位
 				break
 			attempts += 1
 	return traps

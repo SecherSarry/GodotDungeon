@@ -16,6 +16,7 @@ func actions(hero: Hero):
 	actions.append("脱下" if is_equipped(hero) else "装备")
 	return actions
 
+var slot_of_unequipped: int = -1
 # 装备 / 脱下分派。直译 SPD EquipableItem.execute（EquipableItem.java:70-93）：
 # 原版本函数只剩两件事——`AC_EQUIP` 调 doEquip、`AC_UNEQUIP` 调 doUnequip，
 # 取出（detach）与记时都在那两个方法内部；放下/扔出则落到 super（Item.execute）。
@@ -29,6 +30,8 @@ func execute(hero: Hero, action: String = default_action) -> void:
 	elif action == "脱下":
 		do_unequip(hero, true)
 
+func time_to_equip(hero: Hero) -> float:
+	return 1.0
 # 装备全流程——**子类必写**（武器写 hero.weapon、护甲写 hero.armor）。
 # 原版这里是 abstract（EquipableItem.java:122），GDScript 没有抽象方法，
 # 但也不能不声明：execute 里那句 do_equip(hero) 是本类内的直接调用，
@@ -54,7 +57,15 @@ func do_equip(hero: Hero):
 # 回合推进统一由 InventoryUI 在 execute 返回后调 hero.on_operate_complete() 办一次
 # （见 Item.execute 顶部注释），物品层再 next() 就是同一动作的双重推进。
 # 原版的诅咒检查（EquipableItem.java:126-133）本工程无对应物。
-func do_unequip(hero: Hero, collect: bool = true):
+func do_unequip(hero: Hero, collect: bool = true, single: bool = true):
+	if cursed:
+		return false
+		
+	if single:
+		hero.spend_and_next(time_to_equip(hero))
+	else:
+		hero.speed(time_to_equip(hero))
+		
 	for i in hero.belongings.size():
 		if hero.belongings[i] == self:
 			hero.belongings[i] = null

@@ -5,34 +5,50 @@
 # id 沿用 RegularLevel 既有的 0–13，数值可直接互通。
 class_name Terrain
 extends RefCounted
+const CHASM             := 0
+const EMPTY             := 1
+const GRASS             := 2
+const EMPTY_WELL        := 3
+const WALL              := 4
+const DOOR              := 5
+const OPEN_DOOR         := 6
+const ENTRANCE          := 7
+const ENTRANCE_SP       := 37
+const EXIT              := 8
+const EMBERS            := 9
+const LOCKED_DOOR       := 10
+const HERO_LKD_DR       := 38
+const CRYSTAL_DOOR      := 31
+const PEDESTAL          := 11
+const WALL_DECO         := 12
+const BARRICADE         := 13
+const EMPTY_SP          := 14
+const HIGH_GRASS        := 15
+const FURROWED_GRASS    := 30
 
-# ==================== 地形 id ====================
-# 0–13 为既有地形 id，数值可直接互通，勿擅自改动。
-const CHASM          := 0    # 深渊
-const EMPTY          := 1    # 空地板
-const GRASS          := 2
-const EMPTY_WELL     := 3    # 空水井
-const WALL           := 4
-const DOOR           := 5
-const OPEN_DOOR      := 6
-const ENTRANCE       := 7
-const EXIT           := 8
-const EMBERS         := 9
-const LOCKED_DOOR    := 10
-const WATER          := 11
-const HIGH_GRASS     := 12
-const FURROWED_GRASS := 13
+const SECRET_DOOR       := 16
+const SECRET_TRAP       := 17
+const TRAP              := 18
+const INACTIVE_TRAP     := 19
 
-# 14 起：尚未有生成器产出，留给后续新增地形
-const WALL_DECO      := 14   # 装饰性墙（仍是墙）
-const EMPTY_DECO     := 15   # 带装饰的地板（可走）
-const EMPTY_SP       := 16   # 特殊空地（可走）
-const TRAP           := 17
-const SECRET_TRAP    := 18   # 未发现的陷阱：可走 + SECRET
-const INACTIVE_TRAP  := 19   # 已解除的陷阱：等同地板
+const EMPTY_DECO        := 20
+const LOCKED_EXIT       := 21
+const UNLOCKED_EXIT     := 22
+const WELL              := 24
+const BOOKSHELF         := 27
+const ALCHEMY           := 28
 
-# 别名：新层用 WELL，旧层用 EMPTY_WELL，同一格地形
-const WELL := EMPTY_WELL
+const CUSTOM_DECO_EMPTY := 32
+const CUSTOM_DECO       := 23
+const STATUE            := 25
+const STATUE_SP         := 26
+
+const REGION_DECO       := 33
+const REGION_DECO_ALT   := 34
+const MINE_CRYSTAL      := 35
+const MINE_BOULDER      := 36
+
+const WATER             := 29
 
 # ==================== 标志位 ====================
 const FLAG_PASSABLE     := 1    # 可走
@@ -74,7 +90,6 @@ const FLAGS := {
 	FURROWED_GRASS: FLAG_PASSABLE | FLAG_FLAMABLE,
 	WALL_DECO:      FLAG_LOS_BLOCKING | FLAG_SOLID,
 	EMPTY_DECO:     FLAG_PASSABLE,
-	EMPTY_SP:       FLAG_PASSABLE,
 	TRAP:           FLAG_PASSABLE,
 	SECRET_TRAP:    FLAG_PASSABLE | FLAG_SECRET,
 	INACTIVE_TRAP:  FLAG_PASSABLE,
