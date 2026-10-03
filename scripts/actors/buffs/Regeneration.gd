@@ -1,6 +1,10 @@
 extends Buff
 class_name Regeneration
 
+var hero: Hero:
+	get:
+		return GameState.hero
+		
 func _init() -> void:
 	super()
 	act_priority = HERO_PRIO - 1;
@@ -11,7 +15,22 @@ var REGENERATION_DELAY: float = 10
 func act() -> bool:
 	if target.is_alive():
 		if regen_on() and target.hp < regen_cap() and !target.is_starving():
+			var chalice_cursed: bool = false
+			var chalice_level = -1
+			if 1:
+				if hero.get_buff(ChaliceOfBlood.ChaliceRegen) != null:
+					chalice_cursed = hero.get_buff(ChaliceOfBlood.ChaliceRegen).is_cursed()
+					chalice_level = hero.get_buff(ChaliceOfBlood.ChaliceRegen).item_level()
+				#elif (hero.buff(SpiritForm.SpiritFormBuff.class) != null && hero.buff(SpiritForm.SpiritFormBuff.class).artifact() instanceof ChaliceOfBlood):
+					#chaliceLevel = SpiritForm.artifactLevel();
+			
 			var delay: float = REGENERATION_DELAY
+			if chalice_level != -1:
+				if chalice_cursed:
+					delay *= 1.5
+				else:
+					delay -= 1.33 + chalice_level * 0.667
+					#delay /= 
 			
 			partical_regen += 1.0 / delay
 

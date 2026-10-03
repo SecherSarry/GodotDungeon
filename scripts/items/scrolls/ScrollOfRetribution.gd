@@ -7,9 +7,9 @@ func _init():
 
 # 催眠：读者视野内的怪全部陷入困倦，读者自己也困倦。
 # 过滤用 curUser.FOV 而非写死英雄的——卷轴按"读者自己的视野"生效，将来怪读卷轴也自动成立。
-# FOV 无需在此重算：它由 GameScene.update_fov() 在每次行动后刷新，而读者此刻尚未移动。
-func do_read(curUser: Char) -> bool:
-	detach()
+# FOV 无需在此重算：它由 GameScene.observe() 在每次行动后刷新，而读者此刻尚未移动。
+func do_read(curUser: Char) -> void:
+	detach(curUser.backpack)
 	var hp_percent: float = (curUser.hp - curUser.max_hp) / float(curUser.max_hp)
 	var power: float = min(4.0, 4.45*hp_percent)
 	
@@ -24,7 +24,7 @@ func do_read(curUser: Char) -> bool:
 	Buff.affect(curUser, Weakness, Weakness.DURATION)
 	identify()
 	read_animation()
-	return true
+	return
 
 func value() -> int:
 	return 40 * item_quantity

@@ -550,6 +550,69 @@ sources/0 = SubResource("TileSetAtlasSource_av3mj")
 [sub_resource type="LabelSettings" id="LabelSettings_wkb31"]
 font_size = 24
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8wagj"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 2
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_m3eoi"]
+bg_color = Color(1.0039686, 0, 0, 1)
+border_width_left = 2
+border_width_top = 4
+border_width_bottom = 2
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_bhunq"]
+font_size = 20
+outline_size = 8
+outline_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hv17g"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 4
+border_width_bottom = 2
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jq3iw"]
+bg_color = Color(1, 1, 0, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_bottom = 2
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eaf51"]
+bg_color = Color(0, 0, 0, 0)
+border_width_top = 2
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_e0qku"]
+bg_color = Color(1, 0.5019608, 0, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_bottom = 4
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_riqys"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 4
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_8wagj"]
+font_size = 36
+font_color = Color(1, 1, 0.5019608, 1)
+outline_size = 12
+outline_color = Color(0, 0, 0, 1)
+
 [node name="GameScene" type="Node2D" unique_id=631823772]
 script = ExtResource("1_h42mu")
 
@@ -559,7 +622,6 @@ script = ExtResource("1_h42mu")
 
 [node name="TerrainTileMapLayer" type="TileMapLayer" parent="Layers" unique_id=1500780842]
 texture_filter = 1
-tile_map_data = PackedByteArray("AAABAAAAAAAAAAAAAAACAAAAAAAAAAAAAAABAAEAAAAAAAAAAAACAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAMAAAAAAAAAAAABAAMAAAAAAAAAAAABAAIAAAAAAAAAAAACAAIAAAAAAAAAAAADAAIAAAAAAAAAAAACAAMAAAAAAAAAAAADAAMAAAAAAAAAAAADAAEAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAUAAAAAAAAAAAABAAUAAAAAAAAAAAABAAQAAAAAAAAAAAACAAQAAAAAAAAAAAACAAUAAAAAAAAAAAADAAUAAAAAAAAAAAAEAAUAAAAAAAAAAAAEAAQAAAAAAAAAAAADAAQAAAAAAAAAAAAEAAMAAAAAAAAAAAAEAAIAAAAAAAAAAAAEAAEAAAAAAAAAAAAEAAAAAAAAAAAAAAAFAAAAAAAAAAAAAAAFAAEAAAAAAAAAAAAFAAIAAAAAAAAAAAAFAAMAAAAAAAAAAAAFAAQAAAAAAAAAAAAFAAUAAAAAAAAAAAA=")
 tile_set = SubResource("TileSet_naftm")
 script = ExtResource("3_coqjb")
 
@@ -574,7 +636,6 @@ metadata/_custom_type_script = "uid://cjk8nronimk5r"
 
 [node name="WallsTileMapLayer" type="TileMapLayer" parent="Layers" unique_id=2062227814]
 texture_filter = 1
-tile_map_data = PackedByteArray("AAACAAIAAAACAAkAAAADAAIAAAAAAAUAAAACAAMAAAACAAkAAAADAAMAAAAAAAUAAAAFAAIAAAAAAAUAAAAEAAIAAAAAAAUAAAAEAAMAAAAAAAUAAAAFAAQAAAAAAAUAAAACAAQAAAAAAAUAAAABAAQAAAAAAAUAAAAAAAQAAAADAAkAAAAAAAUAAAACAAkAAAAAAAMAAAAAAAkAAAAAAAIAAAAAAAkAAAABAAMAAAAAAAkAAAABAAIAAAAAAAkAAAA=")
 tile_set = SubResource("TileSet_ldck6")
 script = ExtResource("7_8wagj")
 
@@ -582,14 +643,6 @@ script = ExtResource("7_8wagj")
 tile_set = SubResource("TileSet_av3mj")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1157379310]
-
-[node name="TalentList" type="ItemList" parent="CanvasLayer" unique_id=498283986]
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_top = -400.0
-offset_right = 200.0
-grow_vertical = 0
 
 [node name="BuffList" type="ItemList" parent="CanvasLayer" unique_id=1398873984]
 anchors_preset = 1
@@ -623,7 +676,7 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -540.0
-offset_top = -520.0
+offset_top = -540.0
 grow_horizontal = 0
 grow_vertical = 0
 
@@ -632,21 +685,21 @@ layout_mode = 0
 offset_left = 10.0
 offset_top = 10.0
 offset_right = 110.0
-offset_bottom = 510.0
+offset_bottom = 530.0
 
 [node name="ItemList" type="ItemList" parent="CanvasLayer/InventoryUI/Panel" unique_id=140639859]
 layout_mode = 0
 offset_left = 120.0
 offset_top = 10.0
 offset_right = 320.0
-offset_bottom = 510.0
+offset_bottom = 530.0
 
 [node name="BelongingsList" type="ItemList" parent="CanvasLayer/InventoryUI/Panel" unique_id=2014455968]
 layout_mode = 0
 offset_left = 330.0
 offset_top = 10.0
 offset_right = 530.0
-offset_bottom = 510.0
+offset_bottom = 530.0
 
 [node name="Button" type="Button" parent="CanvasLayer" unique_id=1579450939]
 offset_left = 1248.0
@@ -668,3 +721,117 @@ offset_top = 872.0
 offset_right = 1368.0
 offset_bottom = 932.0
 text = "睡觉"
+
+[node name="HeroStatue" type="Control" parent="CanvasLayer" unique_id=1688686789]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+grow_vertical = 0
+
+[node name="Panel" type="Panel" parent="CanvasLayer/HeroStatue" unique_id=2030174669]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -90.0
+offset_right = 600.0
+grow_vertical = 0
+
+[node name="HealthBar" type="ProgressBar" parent="CanvasLayer/HeroStatue/Panel" unique_id=418550464]
+layout_mode = 0
+offset_left = 100.0
+offset_right = 600.0
+offset_bottom = 30.0
+theme_override_styles/background = SubResource("StyleBoxFlat_8wagj")
+theme_override_styles/fill = SubResource("StyleBoxFlat_m3eoi")
+max_value = 30.0
+step = 1.0
+value = 15.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="CanvasLayer/HeroStatue/Panel/HealthBar" unique_id=1446286192]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "30/30"
+label_settings = SubResource("LabelSettings_bhunq")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ExprienceBar" type="ProgressBar" parent="CanvasLayer/HeroStatue/Panel" unique_id=672700575]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 30.0
+offset_right = 600.0
+offset_bottom = 60.0
+theme_override_styles/background = SubResource("StyleBoxFlat_hv17g")
+theme_override_styles/fill = SubResource("StyleBoxFlat_jq3iw")
+max_value = 10.0
+step = 1.0
+value = 5.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="CanvasLayer/HeroStatue/Panel/ExprienceBar" unique_id=1374453884]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "30/30"
+label_settings = SubResource("LabelSettings_bhunq")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HungerBar" type="ProgressBar" parent="CanvasLayer/HeroStatue/Panel" unique_id=871071072]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 60.0
+offset_right = 600.0
+offset_bottom = 90.0
+theme_override_styles/background = SubResource("StyleBoxFlat_eaf51")
+theme_override_styles/fill = SubResource("StyleBoxFlat_e0qku")
+max_value = 450.0
+step = 1.0
+value = 300.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="CanvasLayer/HeroStatue/Panel/HungerBar" unique_id=26823781]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "30/30"
+label_settings = SubResource("LabelSettings_bhunq")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LevelLabel" type="Label" parent="CanvasLayer/HeroStatue/Panel" unique_id=604598650]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -90.0
+offset_right = 100.0
+grow_vertical = 0
+theme_override_styles/normal = SubResource("StyleBoxFlat_riqys")
+text = "Lv.1"
+label_settings = SubResource("LabelSettings_8wagj")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TalentList" type="ItemList" parent="CanvasLayer/HeroStatue" unique_id=498283986]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -490.0
+offset_right = 200.0
+offset_bottom = -90.0
+grow_vertical = 0

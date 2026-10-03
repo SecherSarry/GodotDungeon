@@ -8,26 +8,6 @@ func can_attack(enemy: Char):
 	return max(absi(diff.x), absi(diff.y)) <= 1
 	return false
 
-func _ready():
-	max_hp = 8
-	hp = 8
-	add_to_group("monster")
-	rest_anim = "run"   # 静止站立动画
-
-	$ProgressBar.max_value = max_hp
-	# 起播静止动画。GameScene 不做动画点播（动画由角色自管），.tscn 里也没开 autoplay，
-	# 故这里必须自己播一次；否则 AnimatedSprite2D 只显示默认动画的第 0 帧然后定格。
-	play_anim(rest_anim)
-
-func _process(delta: float) -> void:
-	super._process(delta)   # 继承基类滑动推进（移动自滑由 Char._process 驱动）
-
-	$ProgressBar.value = hp
-	if hp == max_hp or hp == 0:
-		$ProgressBar.visible = false
-	else:
-		$ProgressBar.visible = true
-
 # ---------- AI 状态机 ----------
 # 按状态分派行为的骨架：每个状态是一支 AiState 子类，行为写在各自 act()。
 # 状态对象无自身数据、由本怪持有并复用（_states）；可变数据（锁定敌人、游荡目标）挂在怪身上，
@@ -86,6 +66,41 @@ func pick_wander_target() -> Vector2i:
 func _init() -> void:
 	super()
 	act_priority = MOB_PRIO
+	# 数据初始化（原 _ready 里那几条）。表现（血条 / 起播动画）在 ActorNode._ready。
+	max_hp = 8
+	hp = 8
+	is_monster = true
+	rest_anim = "run"   # 静止站立动画
+
+# ---------- 存档 ----------
+# Char 层（位置 / 血量 / 状态 / 阵营 / buff…）由 super 带上；这里补怪自己的：
+#   script —— 怪的种类。Mob.tscn 是通用场景，重建时靠它 load().new() 复原成（未来的）对应怪种，
+#             不再像原来那样把每只都硬编成 Rat。
+#   state / target —— AI 状态与游荡目标格。enemy 是角色引用，不入档，读回后由 Mob.act 重新锁定。
+func serialize() -> Dictionary:
+	var data = super.serialize()
+	data["script"] = get_script().resource_path
+	data["state"] = state
+	data["target"] = [target.x, target.y]
+	return data
+
+func deserialize(data: Dictionary) -> void:
+	super.deserialize(data)
+	state = int(data.get("state", State.SLEEPING))
+	var tg = data.get("target", null)
+	if tg != null:
+		target = Vector2i(int(tg[0]), int(tg[1]))
+
+# 由存档字典重建一只怪。脚本路径失效返回 null，调用方跳过。
+# scr 显式声明 Variant：load() 静态返回 Resource 而无 new()，声明成 Variant 走动态派发。
+static func from_data(data: Dictionary) -> Mob:
+	var path: String = data.get("script", "")
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var scr: Variant = ResourceLoader.load(path)
+	var mob: Mob = scr.new()
+	mob.deserialize(data)
+	return mob
 
 # 行动入口：只做感知，行为交给当前状态对象。
 # 契约同 Actor.act（见 Actor.gd）：时长由状态内的 spend 自记，再 return true 放行。

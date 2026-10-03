@@ -15,14 +15,28 @@ var monsters: Array = []
 var is_processing: bool = false
 
 # ---------- 注册/注销 ----------
-func register_actor(actor: Char):
-	if actor.is_in_group("hero"):
-		hero = actor
-	elif actor.is_in_group("monster"):
-		if actor not in monsters:
-			monsters.append(actor)
+# actor 现在是数据（Char 资源），不再是节点，is_in_group 无从谈起，故拆成显式两法。
+# 召唤方（GameScene）按种类各调其一。
 
-func unregister_actor(actor: Char):
+# 开局清空，由 GameState._reset_run 调用。hero 与 monsters 都是 autoload 常驻，
+# 进第二局时上一局的数据仍在列——那些怪的表现节点已随上一局的场景释放，留着会被继续调度。
+# 世界锁与处理标志一并复位：新局开局"无人在行动"，且上一局若死在循环里，标志留着下一局就永远进不去。
+func clear_actors() -> void:
+	hero = null
+	monsters.clear()
+	Actor.current = null
+	is_processing = false
+
+func register_hero(actor: Char) -> void:
+	hero = actor
+
+func register_monster(actor: Char) -> void:
+	if actor not in monsters:
+		monsters.append(actor)
+
+# 摘除。data 侧 is_instance_valid 恒为真（引用在手上就有效），"死了没"不能靠它判，
+# 显式摘除是唯一手段——死亡（Char.destory）与清场（GameScene）两处都走这里。
+func unregister_actor(actor: Char) -> void:
 	if actor == hero:
 		hero = null
 	elif actor in monsters:

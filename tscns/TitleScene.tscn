@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://bfddpxuot2xua"]
+
+[ext_resource type="Script" uid="uid://be0ollr08wl8b" path="res://tscns/TitleScene.gd" id="1_gjjhx"]
+
+[node name="TitleScene" type="Node2D" unique_id=1641717022]
+script = ExtResource("1_gjjhx")
+
+[node name="Button" type="Button" parent="." unique_id=632702337]
+offset_left = 780.0
+offset_top = 458.0
+offset_right = 1033.0
+offset_bottom = 589.0
+text = "新档"
+
+[node name="Button3" type="Button" parent="." unique_id=1703200411]
+offset_left = 780.0
+offset_top = 616.0
+offset_right = 1033.0
+offset_bottom = 747.0
+text = "读取存档"
+
+[node name="Button2" type="Button" parent="." unique_id=1449573802]
+offset_left = 1149.0
+offset_top = 459.0
+offset_right = 1402.0
+offset_bottom = 590.0
+text = "删除存档"

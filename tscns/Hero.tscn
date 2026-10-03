@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bbnev606b2b0p"]
 
-[ext_resource type="Script" uid="uid://cf1ei3x2q1ofr" path="res://scripts/actors/heros/Hero.gd" id="1_drdxa"]
+[ext_resource type="Script" uid="uid://1ajm4qy7aeiv" path="res://scripts/actors/ActorNode.gd" id="1_drdxa"]
 [ext_resource type="Texture2D" uid="uid://cnahhq7aawkd0" path="res://assets/warrior.png" id="2_s1tpt"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_0mwkf"]

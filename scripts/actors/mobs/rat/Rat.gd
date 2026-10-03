@@ -1,8 +1,8 @@
 extends Mob
 class_name Rat
 
-func _ready():
-	super()   # 必须调：Mob._ready 里 add_to_group("monster") 是 TurnManager 注册怪物的唯一判据
+func _init():
+	super()   # 必须调：Mob._init 里的 act_priority / max_hp / is_monster 全靠这一行
 	max_lvl = 5
 	alignment = Alignment.ENEMY
 

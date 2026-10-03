@@ -5,10 +5,10 @@ func _init():
 	super()
 	item_name = "升级卷轴"
 
-func do_read(curUser: Char) -> bool:
+func do_read(curUser: Char) -> void:
 	var gs = curUser.game_scene
 	if gs == null:
-		return false
+		return 
 
 	var item: Item = null
 	while true:
@@ -19,12 +19,12 @@ func do_read(curUser: Char) -> bool:
 			print("你什么都没选择")
 			if not is_identified():
 				# 卷轴本身未鉴定：消耗 + 鉴定该种类
-				detach()
+				detach(curUser.backpack)
 				identify()
 				read_animation()
-				return true
+				return
 			# 已鉴定：不消耗，不记时
-			return false
+			return
 
 		# 已鉴定物品：提示并重选
 		if not item.is_upgradable():
@@ -39,10 +39,10 @@ func do_read(curUser: Char) -> bool:
 	print("你升级了" + item.name())
 
 	# 消耗卷轴 + 标记该种类已知
-	detach()
+	detach(curUser.backpack)
 	identify()
 	read_animation()
-	return true
+	return
 
 
 func value() -> int:

@@ -13,12 +13,14 @@ func _init(lvl: int = 0) -> void:
 func actions(hero: Hero):
 	return super(hero) + ["饮用"]
 
+var anonymous = false
 func execute(hero: Hero, action: String = default_action) -> void:
 	await super(hero, action)
 	if action == "饮用":
 		drink(hero)
 
 func drink(hero: Hero):
+	detach(hero.backpack)
 	hero.spend(TIME_TO_DRINK)
 	print("spend")
 	apply(hero)
@@ -26,7 +28,7 @@ func drink(hero: Hero):
 func on_throw(cell: Vector2i):
 	pass
 	
-func apply(hero: Hero):
+func apply(hero: Hero) -> void:
 	shatter(hero.grid_pos)
 	
 func shatter(cell: Vector2i):
@@ -34,5 +36,27 @@ func shatter(cell: Vector2i):
 	if GameState.hero.FOV[cell.y][cell.x]:
 		print("药剂打碎")
 	
+func is_known() -> bool:
+	return anonymous or GameState.known.has(item_name)
+
+func set_known() -> void:
+	if not anonymous:
+		GameState.known[item_name] = true
+		if GameState.hero.is_alive():
+			pass   # SPD 的 Catalog.setSeen / Statistics 图鉴占位
+
+func identify(by_hero: bool = true) -> Item:
+	super.identify()
+	
+	if not is_known():
+		set_known()
+	return self
+
 func splash(cell: Vector2i):
 	pass
+
+func value() -> int:
+	return 30 * item_quantity
+
+func energy_val() -> int:
+	return 6 * item_quantity

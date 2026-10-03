@@ -39,8 +39,9 @@ func time_to_equip(hero: Hero) -> float:
 # 不写这一句连编译都过不去。
 # 不写成空的 pass：那会让漏覆写的子类"装备了却没进槽"而不出声。原版靠编译器挡漏覆写，
 # 这里用 push_error 补上同一道闸（同类写法见 TurnManager.gd:164 的契约告警）。
-func do_equip(hero: Hero):
+func do_equip(hero: Hero) -> bool:
 	push_error("EquipableItem.do_equip 未覆写：%s 装备后不会进入任何槽位" % self)
+	return false
 
 # 脱下：把自己从所在槽清掉，按 collect 决定是否收回背包，并记一次脱下耗时。
 #
@@ -57,22 +58,19 @@ func do_equip(hero: Hero):
 # 回合推进统一由 InventoryUI 在 execute 返回后调 hero.on_operate_complete() 办一次
 # （见 Item.execute 顶部注释），物品层再 next() 就是同一动作的双重推进。
 # 原版的诅咒检查（EquipableItem.java:126-133）本工程无对应物。
-func do_unequip(hero: Hero, collect: bool = true, single: bool = true):
+func do_unequip(hero: Hero, collect: bool, single: bool = true) -> bool:
 	if cursed:
 		return false
 		
 	if single:
 		hero.spend_and_next(time_to_equip(hero))
 	else:
-		hero.speed(time_to_equip(hero))
+		hero.spend(time_to_equip(hero))
 		
-	for i in hero.belongings.size():
-		if hero.belongings[i] == self:
-			hero.belongings[i] = null
-			if collect:
-				Bag.add_item(self)
-			hero.spend(TIME_TO_UNEQUIP)
-			return
+	if not collect or not collect():
+		on_detach()
+		
+	return true
 
 # 放下装备中的物品：先脱下（collect=false = 只离槽、不回包），再走基类落地。
 # 直译 SPD EquipableItem.doDrop（EquipableItem.java:95-99）：
@@ -96,11 +94,16 @@ func cast(user: Hero, dst: Vector2i) -> void:
 		do_unequip(user, false)
 	await super(user, dst)
 
+func equip_cursed(hero: Hero) -> void:
+	pass
+
 # 是否正穿在身上：扫 belongings 全槽。
 # 原版这一条是抽象的、由子类各查自己的槽（KindOfWeapon.java:95 查 weapon/secondWep，
-# Armor.java:371 查 armor）；本工程 belongings 是固定的 5 槽数组（Hero.gd:56），
-# 一条 has() 就覆盖全部槽位，不必让子类各写一份。
+# Armor.java:371 查 armor）；本工程 Belongings.contains 一条就覆盖全部槽位，不必让子类各写一份。
 # 本层同时是 Item.is_equipped（Item.gd:219，非可装备物恒 false）的覆写。
 # 它现在是做判断用的（actions / execute 准入 / 放下与投掷的覆写），不再是唯一的守卫。
 func is_equipped(hero: Hero) -> bool:
-	return hero != null and hero.belongings.has(self)
+	return hero != null and hero.belongings.contains(self)
+
+func activate(ch: Char) -> void:
+	pass

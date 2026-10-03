@@ -28,7 +28,7 @@ func visualcooldown() -> float:
 	return cooldown() + 1.0
 
 # 参数不叫 target：那是成员变量名，同名会遮蔽。同上，不注解 Char 以避开循环依赖。
-func attach_to(buff_target: Char, duration: float = 1) -> bool:
+func attach_to(buff_target: Char) -> bool:
 	if buff_target == null:
 		return false
 
@@ -37,9 +37,7 @@ func attach_to(buff_target: Char, duration: float = 1) -> bool:
 	# 是刷新不是续期。本实例只是携带 duration 的信使，效果已转交，回收掉。
 	var existing = buff_target.get_buff(self.get_script())
 	if existing != null and existing != self:
-		existing.spend(duration)
-		queue_free()
-		return true
+		return true   # 本实例只是携带 duration 的信使，效果已转交；Resource 靠引用计数回收
 
 	# 先落 target 再 add，与 SPD 同序；add 返回 false 必须复位并拒收——
 	#   if (target.add(this)) { ... return true; } else { this.target = null; return false; }
@@ -58,8 +56,6 @@ func attach_to(buff_target: Char, duration: float = 1) -> bool:
 	# 宿主当下正在行动时 now 恰等于宿主 time，两者一致；宿主闲着时（例如英雄给怪物挂 debuff）
 	# 才会分叉——那时按宿主 time 会把到期时刻拖到怪物下一次行动之后，比原版晚。
 	self.time += Actor.now
-	if duration != 0:
-		self.spend(duration)
 
 	return true
 
@@ -70,17 +66,22 @@ func attach_to(buff_target: Char, duration: float = 1) -> bool:
 # WellFed.act 要在 detach 前先存一份宿主——每个子类都得记住这条，且二次 detach 会当场崩。
 # remove 本身幂等（Char.remove 里 `buffs.get(key) != buff` 一判即返回 false），故不必靠置空防重复。
 #
-# queue_free 是原版没有的一行：Java 侧 buff 是普通对象、脱离 Char.buffs 后由 GC 回收；
-# GDScript 的 Node 不是引用计数对象，只从字典里移除等于永久泄漏（NodeDB 退出时一片 leaked）。
-# 故在此显式释放，等价于原版"detach 之后这个对象就该没了"的语义。
-# 开头的幂等守卫挡住二次 detach 对已释放实例的操作——原版靠 GC 不会遇到，我们必须自己挡。
+# 本类随 Actor 一起改继承 Resource（引用计数对象），此前为 Node 泄漏而加的
+# queue_free / is_queued_for_deletion 两步全部撤掉：脱离 Char.buffs 之后引用归零即回收，
+# 与 Java 侧"detach 之后由 GC 收走"同义。
 func detach() -> void:
-	if is_queued_for_deletion():
-		return
 	if target != null:
 		target.remove(self)
-	queue_free()
-	
+
+# 直译 SPD Buff.java 的默认 act()：`diactivate(); return true;`
+# 语义：不自己写 act() 的 buff（被动型，如神器的 chalice_regen）被调度到时，
+# 把自己的时间轴关掉（time = INF，之后不再被 next_actor 选中），并返回 true 让世界继续。
+# 缺了这条会继承 Actor.act() 的 `return false`：被动 buff 每回合仍被选中、返回 false 又不 next()，
+# TurnManager 判成"非英雄返回 false 且未 next()" → break，装神器（圣杯）后世界立刻停产。
+func act() -> bool:
+	diactivate()
+	return true
+
 func name() -> String:
 	return self.get_script().get_global_name()
 
@@ -99,7 +100,7 @@ func desc() -> String:
 # 0 表示"只把锚点对齐到当下"，正是 SPD attachTo 的语义（那边根本不 spend）。
 static func append(target: Char, buff_class):
 	var buff: Buff = buff_class.new()
-	buff.attach_to(target, 0)
+	buff.attach_to(target)
 	return buff
 
 # 挂 buff 的统一入口。直译 SPD Buff.java 那对 affect 重载——Java 靠重载，
@@ -129,3 +130,26 @@ static func do_detach(target: Char, buff_class):
 		return
 	else:
 		b.detach()
+
+
+# ---------- 存档 ----------
+# 存脚本路径 + 剩余时长（cooldown，相对量）+ 标量脚本属性。
+# 存 cooldown 而非 time：time 是"绝对到期时刻"，锚在全局时钟上，而时钟每局归零；
+# 存相对量，回来由 from_data 走 affect(owner, cls, cooldown) 重新锚定。
+# 跳过 time / act_priority：前者由 affect 重建，后者由各子类 _init 重建，回写只会覆盖成错值。
+func serialize() -> Dictionary:
+	return {
+		"script": get_script().resource_path,
+		"cooldown": cooldown(),
+		"props": Bundlable.script_props(self, ["time", "act_priority"]),
+	}
+
+# 由存档字典在 owner 身上重建一个 buff：先按剩余时长挂上，再回写标量属性
+# （Hunger 的饱食度、Regeneration 的累积量这类就在 props 里，靠这一步带上）。
+static func from_data(owner: Char, data: Dictionary):
+	var path: String = data.get("script", "")
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var buff = affect(owner, load(path), float(data.get("cooldown", 0.0)))
+	Bundlable.apply_props(buff, data.get("props", {}))
+	return buff

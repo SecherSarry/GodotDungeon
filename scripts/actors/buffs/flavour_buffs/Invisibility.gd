@@ -21,8 +21,11 @@ func detach() -> void:
 	super.detach()
 	
 static func dispel(ch: Char = null):
-	if GameState.hero == null and ch == null:
-		ch = GameState.hero
+	if ch == null:
+		if GameState.hero == null:
+			return
+		else:
+			ch = GameState.hero
 	
 	var invis: Invisibility = ch.get_buff(Invisibility)
 	if invis != null:

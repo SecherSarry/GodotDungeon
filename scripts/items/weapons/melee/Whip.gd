@@ -1,4 +1,4 @@
-extends Meleeweapon
+extends MeleeWeapon
 class_name Whip
 
 func _init(lvl: int = 0):

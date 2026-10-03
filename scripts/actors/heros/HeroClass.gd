@@ -35,11 +35,17 @@ func init_hero(hero:Hero) -> void:
 	ScrollOfTerror.new().quantity(5).collect()
 	ScrollOfUpgrade.new().quantity(5).collect()
 	
-	Whip.new().collect()
+	#Whip.new().collect()
 	
 	Food.new().quantity(5).collect()
 	MeatPie.new().quantity(5).collect()
-
+	
+	LeatherArmor.new().identify().collect()
+	#MailArmor.new().identify().collect()
+	#ScaleArmor.new().identify().collect()
+	#PlateArmor.new().identify().collect()
+	
+	ChaliceOfBlood.new().identify().collect()
 
 # ---------- 三职业 ----------
 # 原版各自的初始化在 HeroClass 的私有静态方法 initWarrior/initMage/initRogue 里；
@@ -47,6 +53,8 @@ func init_hero(hero:Hero) -> void:
 # 每段的注释记下原版发了什么，缺的物品等有了再补进来——不要凭记忆现造。
 
 class Warrior extends HeroClass:
+	func save_key() -> String:
+		return "WARRIOR"
 	func init_hero(hero: Hero) -> void:
 		super(hero)
 		hero.weapon = WornShortsword.new(2).identify()
@@ -57,6 +65,8 @@ class Warrior extends HeroClass:
 
 
 class Mage extends HeroClass:
+	func save_key() -> String:
+		return "MAGE"
 	func init_hero(hero) -> void:
 		# 原版 initMage：MagesStaff( WandOfMagicMissile ) 入武器槽并 activate、
 		# ScrollOfUpgrade、PotionOfLiquidFlame。
@@ -64,6 +74,8 @@ class Mage extends HeroClass:
 
 
 class Rogue extends HeroClass:
+	func save_key() -> String:
+		return "ROGUE"
 	func init_hero(hero) -> void:
 		# 原版 initRogue：Dagger 入武器槽、CloakOfShadows 入神器槽并 activate、
 		# ThrowingKnife、ScrollOfMagicMapping、PotionOfInvisibility。
@@ -73,3 +85,17 @@ class Rogue extends HeroClass:
 static var WARRIOR := Warrior.new()
 static var MAGE := Mage.new()
 static var ROGUE := Rogue.new()
+
+# 存档标识：Hero 只存 save_key() 那一个字符串，读档用 from_key 查回单例。
+# 不另立"名字 → 实例"的常量表：表要跟三个静态实例保持同步，多一处会漂的真相源。
+func save_key() -> String:
+	return "WARRIOR"
+
+static func from_key(key: String):
+	match key:
+		"MAGE":
+			return MAGE
+		"ROGUE":
+			return ROGUE
+		_:
+			return WARRIOR

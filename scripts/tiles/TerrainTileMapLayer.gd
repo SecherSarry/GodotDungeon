@@ -68,4 +68,4 @@ func _terrain_at(pos: Vector2i) -> int:
 		return -1
 	if pos.y < 0 or pos.y >= LevelManager.MAP_HEIGHT:
 		return -1
-	return LevelManager.map_data[pos.y][pos.x]
+	return LevelManager.level.map_data[pos.y][pos.x]

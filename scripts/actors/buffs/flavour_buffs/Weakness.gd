@@ -6,5 +6,6 @@ static var DURATION: float = 20
 func _init() -> void:
 	super()
 	type = buff_type.NEGATIVE
+	announced = true
 	
 	

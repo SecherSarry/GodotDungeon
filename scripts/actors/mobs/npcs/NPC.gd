@@ -2,9 +2,6 @@ extends Actor
 
 var dialogue = "你好，冒险者！"   # 对话内容
 
-func _ready():
-	add_to_group("npc")
-
 # NPC 可能不参与战斗，仅处理对话；当前不入调度队列，仍遵循统一接口
 func act() -> bool:
 	# 如果玩家相邻，可以触发对话（由 GameScene 检测）

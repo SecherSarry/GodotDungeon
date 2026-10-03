@@ -48,13 +48,17 @@ func _on_cancel():
 	cancel_select()
 
 func refresh():
+	# 背包与装备槽都从 hero.belongings 取（SPD Belongings 全收）。game_scene/hero 尚未就绪时直接跳过。
+	if game_scene == null or game_scene.hero == null:
+		return
 	item_list.clear()
-	for item in Bag.get_inventory():
+	for item in game_scene.hero.backpack.items:
 		item_list.add_item(_label(item))
 
 	belongings_list.clear()
-	for i in game_scene.hero.belongings.size():
-		belongings_list.add_item(_label(game_scene.hero.belongings[i], i))
+	var slots: Array = game_scene.hero.belongings.slots()
+	for i in slots.size():
+		belongings_list.add_item(_label(slots[i], i))
 
 	_reset_selection()
 
@@ -110,7 +114,7 @@ func _current_item() -> Item:
 	var hero = game_scene.get("hero")
 	if hero == null or selected_index < 0:
 		return null
-	var items: Array = Bag.get_inventory() if selected_source == "bag" else hero.belongings
+	var items: Array = hero.backpack.items if selected_source == "bag" else hero.belongings.slots()
 	if selected_index >= items.size():
 		return null
 	return items[selected_index]

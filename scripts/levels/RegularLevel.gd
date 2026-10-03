@@ -1,9 +1,9 @@
 # RegularLevel.gd
 # 模拟原版 RegularLevel 的地图生成器
 # 用法：var result = RegularLevel.generate(depth, feeling)
-# 返回字典 { "map_data": Array2D, "rooms": Array, "mobs": Array, "items": Array, "traps": Array, "entrance": Vector2i, "exit": Vector2i }
+# 返回字典 { "map_data": Array2D, "rooms": Array, "mobs": Array, "items": Array, "traps": Array, "transitions": Array }
 
-extends Node2D
+extends Level
 class_name RegularLevel
 
 # 纯静态地图生成器：唯一对外接口是 static generate()（LevelManager.generate_level 调用）。
@@ -90,14 +90,19 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 	map_data[entrance_pos.y][entrance_pos.x] = ENTRANCE
 	map_data[exit_pos.y][exit_pos.x] = EXIT
 
+	# 出入口各建成一个 LevelTransition，dest 由本层深度推导（入口通 depth-1，出口通 depth+1）。
+	var transitions = [
+		LevelTransition.make(LevelTransition.Type.REGULAR_ENTRANCE, entrance_pos, depth),
+		LevelTransition.make(LevelTransition.Type.REGULAR_EXIT, exit_pos, depth),
+	]
+
 	return {
 		"map_data": map_data,
 		"rooms": rooms,
 		"mobs": mobs,
 		"items": items,
 		"traps": traps,
-		"entrance": entrance_pos,
-		"exit": exit_pos
+		"transitions": transitions
 	}
 
 # ---------- 撒房间 ----------
@@ -384,6 +389,8 @@ static func generate_fallback(depth: int) -> Dictionary:
 		"mobs": [],
 		"items": [],
 		"traps": [],
-		"entrance": Vector2i(1, 1),
-		"exit": Vector2i(MAP_WIDTH-2, MAP_HEIGHT-2)
+		"transitions": [
+			LevelTransition.make(LevelTransition.Type.REGULAR_ENTRANCE, Vector2i(1, 1), depth),
+			LevelTransition.make(LevelTransition.Type.REGULAR_EXIT, Vector2i(MAP_WIDTH-2, MAP_HEIGHT-2), depth),
+		]
 	}

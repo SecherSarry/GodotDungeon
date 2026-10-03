@@ -166,3 +166,12 @@ static func on_food_eaten(hero: Hero, food_val: float, food_sourse: Item):
 		if 1 or hero.hp/float(hero.max_hp) <= 0.33:
 			var healing = 2 + 2 * hero.points_in_talent(ID.HEARTY_MEAL)
 			hero.hp = mini(hero.hp + healing, hero.max_hp)
+
+static func on_item_equipped(hero: Hero, item: Item):
+	hero.update_maxHP(false)
+
+static func on_item_collected(hero: Hero, item: Item):
+	pass
+
+static func on_scroll_used(hero: Hero, pos: Vector2i, factor: float, item: Item):
+	pass

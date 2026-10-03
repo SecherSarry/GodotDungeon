@@ -3,9 +3,9 @@ class_name MagicalSleep
 
 static var STEP: float = 1
 
-func attach_to(buff_target: Char, duration: float = 1) -> bool:
+func attach_to(buff_target: Char) -> bool:
 	# duration 必须透传：基类的默认值是 1，不透传的话卷轴传进来的时长会被吞掉。
-	if not super.attach_to(buff_target, duration):
+	if not super.attach_to(buff_target):
 		return false
 	# 续期路径：基类已把 duration 转交给在场那个实例、并 queue_free 了本实例，target 未被赋值。
 	# 此时不可再对宿主叠加副作用——本实例不会走 detach() 回收，paralysed 会只增不减。

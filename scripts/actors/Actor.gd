@@ -1,5 +1,11 @@
-extends Node2D
+extends Bundlable
 class_name Actor
+
+# 表现层弱引用（ActorNode）。不注解类型：本类若静态引用 ActorNode，会与
+# ActorNode.actor_data 构成 class_name 互相引用 → 解析失败（同 Buff.gd 顶部那条）。
+# 数据 → 表现的调用方向照抄 SPD（Actor.move() 里调 sprite.move()）；反向的
+# "谁是我的数据"由 ActorNode.actor_data 承担，两边各持一边、不成环。
+var sprite = null
 
 # 一"拍"的时长。直译 SPD `public static final float TICK = 1f`：常量，不可改。
 # 子类/内层类里经由实例访问（如 Mob.gd 的 mob.TICK）仍成立，动态查名不区分常量与变量。

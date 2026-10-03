@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://c01mimy5ntesb"]
+[gd_scene format=3 uid="uid://ccuv1bjwn8rcq"]
 
 [ext_resource type="Script" uid="uid://bd1gu6sxnxo6f" path="res://scripts/actors/mobs/rat/Rat.gd" id="1_gxu0t"]
 [ext_resource type="Texture2D" uid="uid://c06tuq5blgpe7" path="res://assets/rat.png" id="2_vxicy"]

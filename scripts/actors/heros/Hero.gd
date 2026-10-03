@@ -28,8 +28,8 @@ var path: Array = []
 
 
 
-var attack_skill = 10
-var defense_skill = 5
+var attack_skill: int = 10
+var defense_skill: int = 5
 
 # 输入门闩（原版 Hero.ready）。true = 空闲待输入；act() 分派动作前会置假。
 # 门闩一关，GameScene 的 is_player_turn 就挡住点击与方向键——所以"行走途中改道"是没有的
@@ -53,7 +53,7 @@ var attack_target: Char
 
 var resting: bool = false
 
-var belongings = []   # 已装备物品：[0]=武器, [1]=护甲（SPD 风格）；空槽一律 null
+var belongings: Belongings
 
 var str = 10
 
@@ -62,52 +62,64 @@ var exp = 0
 
 var max_hp_boost = 0
 
-
-# 手中武器即 belongings[0]。留 weapon 这个访问名，各处读 hero.weapon 不必改写成 belongings[0]。
-var weapon: Meleeweapon:
+# 随身物容器（SPD Belongings）：背包与六槽都归 belongings 管；weapon/armor/… 只是转发到对应槽，
+# 各处仍读 hero.weapon，不必改写成 hero.belongings.weapon。
+var backpack: Belongings.Backpack:
 	get:
-		return belongings[0] if belongings.size() > 0 else null
+		return belongings.backpack
+var weapon: KindOfWeapon:
+	get:
+		return belongings.weapon
 	set(value):
-		belongings[0] = value
+		belongings.weapon = value
 
 var armor: Armor:
 	get:
-		return belongings[1] if belongings.size() > 1 else null
+		return belongings.armor
 	set(value):
-		belongings[1] = value
+		belongings.armor = value
 
-var artifact:
+var artifact: Artifact:
 	get:
-		return belongings[2] if belongings.size() > 2 else null
+		return belongings.artifact
 	set(value):
-		belongings[2] = value
+		belongings.artifact = value
 
-var common_slot:
+var misc: KindOfMisc:
 	get:
-		return belongings[3] if belongings.size() > 3 else null
+		return belongings.misc
 	set(value):
-		belongings[3] = value
+		belongings.misc = value
 
-var ring:
+var ring: Ring:
 	get:
-		return belongings[4] if belongings.size() > 4 else null
+		return belongings.ring
 	set(value):
-		belongings[4] = value
+		belongings.ring = value
+		
+var second_wep: KindOfWeapon:
+	get:
+		return belongings.second_wep
+	set(value):
+		belongings.second_wep = value
 
-func _ready():
-	init()
-	add_to_group("hero")   # 注册到组，供 TurnManager 识别
+# SPD Belongings 由 Hero 构造器持有（Belongings(Hero owner)）；本工程 Hero 是 Resource，对应地在 _init 里 new。
+# 放 _init 而非 init()：读档路径不跑 init() 就直接 deserialize，GameState._reset_run 也会在 init() 前访问
+# hero.backpack——belongings 必须从构造起就非空。super() 必调：Char._init 赋 act_priority（见 Char.gd:30）。
+func _init() -> void:
+	super()
+	belongings = Belongings.new()
 
-
+# 无 _ready：Hero 已是数据（Resource），不再有节点生命周期。
+# init() 由 GameScene.render_hero 在摆好表现节点后显式调用；
+# 入队注册改走 TurnManager.register_hero（原 add_to_group("hero")）。
 func init():
 	alignment = Alignment.ALLY
 	max_hp = 20
 	hp = 20
-	
 	str = STARTING_STR
+
 	live()
-	
-	belongings = [null, null, null, null, null]   # 开局空手、无甲；两槽必须齐备，否则取值越界
 
 	# 天赋树：按职业建结构，点数全 0（原版 HeroClass.initHero 里的 Talent.initClassTalents(this)）。
 	# 曾经这里写的是 `talents[HEARTY_MEAL] = Talent.DATA.get(HEARTY_MEAL)`——那是把**元数据**
@@ -168,6 +180,8 @@ func reach() -> int:
 
 func speed() -> float:
 	var speed: float = super()
+	if armor != null:
+		speed = armor.speed_factor(self, speed)
 	return speed
 
 func can_attack(enemy: Char) -> bool:
@@ -229,10 +243,10 @@ func enter_ready() -> void:
 	cur_action = null
 	damage_interrupt = true   # 原版 Hero.ready() 同置（那边只有 resume() 会置回 false，本工程没有 resume）
 	path = []                 # 空闲即丢弃缓存路径：下次点别处不必先判失效
-	end_continuous_move()     # 会话结束：回静止动画（仍在滑则交 _process 收尾；见 Char.end_continuous_move）
+	if sprite: sprite.end_continuous_move()   # 会话结束：回静止动画（仍在滑则交 _process 收尾；见 ActorNode.end_continuous_move）
 
 # 占用输入门：本轮有事要做，别收新指令。原版 Hero.busy()。
-# 原版还会 sprite.busy()，本工程动画由角色自身行动方法内 play_anim 自管，故只剩这一件事。
+# 原版还会 sprite.busy()，本工程动画由表现层（ActorNode）自管，故只剩这一件事。
 func set_busy() -> void:
 	is_ready = false
 
@@ -287,7 +301,8 @@ func rest(full_rest: bool = false) -> void:
 # 否则休息循环在一帧内空转到底，玩家点什么都到不了处理函数，rest(true) 就成了死循环。
 # 只加这两处：正常行走/攻击不能按拍让出，那会把"英雄与各怪同帧起滑"的并行拆成串行。
 func wait_one_tick() -> void:
-	await get_tree().create_timer(1.0 / 30.0).timeout
+	# get_tree() 是节点 API、数据层拿不到，故计时转交表现层；时长与语义不变。
+	await sprite.wait(1.0 / 30.0)
 
 # ---------- 动作分派（原版 Hero.act 的裁剪版） ----------
 # 三步同序：刷视野 → 特殊态（麻痹 / 空闲 / 休息）→ 有动作则分派。
@@ -298,7 +313,7 @@ func act() -> bool:
 	# 行走途中每步都走这里，于是边走边开图（原版同）。
 	var gs = game_scene
 	if gs != null:
-		gs.update_fov()
+		gs.observe()
 
 	if (paralysed > 0):
 		print("[HERO] 麻痹中 paralysed=", paralysed, " HP=", hp, "/", max_hp, " time=", time)
@@ -338,7 +353,7 @@ func act() -> bool:
 # 原版还有个"站在草上原地踩一脚"的分支（canSelfTrample），本工程没有踩草机制，不移植。
 # 注意 Move 成功后**不清 cur_action**：下一拍还走这条，于是一路走到终点（原版同）。
 func act_move() -> bool:
-	begin_continuous_move()   # 走整段期间不回 idle，跑步动画才连得上
+	if sprite: sprite.begin_continuous_move()   # 走整段期间不回 idle，跑步动画才连得上
 	if get_closer(cur_action.dst):
 		return true
 	enter_ready()
@@ -379,15 +394,15 @@ func act_pick_up() -> bool:
 	return false
 
 # 直译 SPD Hero.actTransition（Hero.java:1380）。
-# 站到出入口上 → 换层并交回输入（原版 activateTransition 之后也是 curAction = null + false）；
-# 还没到 → 走近。于是"点远处的楼梯"一次点击就能走到并下楼，不必点到格子上再点一次。
+# 站到出入口上 → 取该格的 transition，交场景激活换层并交回输入（原版 activateTransition 之后也是
+# curAction = null + false）；还没到 → 走近。于是"点远处的楼梯"一次点击就能走到并下楼，不必点到格子上再点一次。
 func act_transition() -> bool:
-	if grid_pos == cur_action.dst:
-		var depth := GameState.depth + (-1 if grid_pos == LevelManager.hero_spawn else 1)
+	var transition = LevelManager.level.get_transition_at(grid_pos)
+	if grid_pos == cur_action.dst and transition != null:
 		cur_action = null
 		var gs = game_scene
 		if gs != null:
-			gs.change_floor(depth)
+			gs.activate_transition(transition)
 		# 换成功、以及"已在地牢顶层没得换"两种情形都回到空闲，等下一次输入。
 		# 不能省：分派前 set_busy() 关掉了输入门，不在这里开回来，新层就再也点不动了。
 		enter_ready()
@@ -422,7 +437,7 @@ func handle(cell: Vector2i) -> bool:
 		cur_action = a
 		return true
 
-	if cell == LevelManager.hero_spawn or cell == LevelManager.exit_cell:
+	if LevelManager.level.get_transition_at(cell) != null:
 		var a = HeroAction.LvlTransition.new()
 		a.dst = cell
 		cur_action = a
@@ -640,3 +655,45 @@ func on_operate_complete():
 func next():
 	if (is_alive()):
 		super.next()
+
+# 只在英雄自己的字段上工作：Char 层的（血量/位置/状态/buff…）由 super.serialize 带上。
+func serialize() -> Dictionary:
+	var data = super.serialize()
+	data["max_hp_boost"] = max_hp_boost
+	data["str"] = str
+	data["lvl"] = lvl
+	data["exp"] = exp
+	data["attack_skill"] = attack_skill
+	data["defense_skill"] = defense_skill
+	# 职业只存名字，读档查回单例（HeroClass.save_key / from_key）——不存整个对象。
+	data["hero_class"] = heroClass.save_key()
+	data["belongings"] = belongings.serialize()
+	data["talents"] = talents
+	return data
+
+func deserialize(data: Dictionary):
+	super.deserialize(data)   # Char 层：血量 / 位置 / 状态 / 阵营 / buff
+	# JSON 数字读回来一律是 float，而下列字段全线按 int 用（等级、技能、点数…），故逐项 int() 归一。
+	# 都带默认值：读到缺字段的旧档时退回字段的初始值，而不是被 int(null)=0 清零。
+	max_hp_boost = int(data.get("max_hp_boost", 0))
+	str = int(data.get("str", STARTING_STR))
+	lvl = int(data.get("lvl", 1))
+	exp = int(data.get("exp", 0))
+	attack_skill = int(data.get("attack_skill", 10))
+	defense_skill = int(data.get("defense_skill", 5))
+
+	heroClass = HeroClass.from_key(data.get("hero_class", "WARRIOR"))
+
+	# 背包与六槽整份还原（Hero._init 已保证 belongings 非空）。
+	belongings.deserialize(data.get("belongings", {}))
+
+	# JSON 的对象键只能是字符串，写出去时内层 int 键（Talent.ID）全变成了 "0" "1"…
+	# 读回来必须转回 int，否则 has_talent / points_in_talent / upgrade_talent 用 int 查恒落空。
+	# 值同理：JSON 数字读回来是 float，而点数全线按 int 用（talent_points_spent 累加、
+	# upgrade_talent 自增、format "%d" 显示），故一并 int() 归一。
+	talents = []
+	for tier in data.get("talents", []):
+		var t := {}
+		for k in tier:
+			t[int(k)] = int(tier[k])
+		talents.append(t)

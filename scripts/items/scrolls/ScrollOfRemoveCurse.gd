@@ -5,10 +5,10 @@ func _init():
 	super()
 	item_name = "驱邪卷轴"
 
-func do_read(curUser: Char) -> bool:
+func do_read(curUser: Char) -> void:
 	var gs = curUser.game_scene
 	if gs == null:
-		return false
+		return
 
 	var item: Item = null
 	while true:
@@ -19,12 +19,12 @@ func do_read(curUser: Char) -> bool:
 			print("你什么都没选择")
 			if not is_identified():
 				# 卷轴本身未鉴定：消耗 + 鉴定该种类
-				detach()
+				detach(curUser.backpack)
 				uncurse(curUser, item)
 				read_animation()
-				return true
+				return
 			# 已鉴定：不消耗，不记时
-			return false
+			return
 
 		# 已鉴定物品：提示并重选
 		if !item.cursed and item.cursed_known:
@@ -39,10 +39,10 @@ func do_read(curUser: Char) -> bool:
 	print("你净化了" + item.name())
 
 	# 消耗卷轴 + 标记该种类已知
-	detach()
+	detach(curUser.backpack)
 	identify()
 	read_animation()
-	return true
+	return
 
 # 直译 SPD ScrollOfRemoveCurse.uncurse 的**单件**那半边。原版签名是可变参
 # `uncurse(Hero hero, Item... items)`，一次能净化一串；GDScript 没有可变参，

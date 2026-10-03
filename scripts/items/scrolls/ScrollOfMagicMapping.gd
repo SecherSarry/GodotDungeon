@@ -7,12 +7,12 @@ func _init():
 
 # 读卷轴 = 触发传送：随机空位逻辑已收拢到 MapManager.teleport（含视觉摆位），
 # 这里只需触发并回显，无需直握场景。
-func do_read(curUser: Char) -> bool:
-	detach()
+func do_read(curUser: Char) -> void:
+	detach(curUser.backpack)
 	for y in LevelManager.MAP_HEIGHT:
 		for x in LevelManager.MAP_WIDTH:
-			LevelManager.explored[y][x] = true
+			LevelManager.level.explored[y][x] = true
 	
 	identify()
 	read_animation()
-	return true
+	return

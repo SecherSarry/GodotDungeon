@@ -137,7 +137,7 @@ func _avoid(index: int) -> bool:
 	return Terrain.has_flag(_terrain_at(index), Terrain.FLAG_AVOID)
 
 func _terrain_at(index: int) -> int:
-	return LevelManager.map_data[index / LevelManager.MAP_WIDTH][index % LevelManager.MAP_WIDTH]
+	return LevelManager.level.map_data[index / LevelManager.MAP_WIDTH][index % LevelManager.MAP_WIDTH]
 
 # 撞点判据之一：该格有没有角色。原版是 findChar（角色+怪），
 # 但弹道起点恒为投掷者自身、而下面各处都带 `cell != from_i`，故只需问"是否有别人"。

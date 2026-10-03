@@ -5,8 +5,8 @@ func _init():
 	super()
 	item_name = "恐惧卷轴"
 
-func do_read(curUser: Char) -> bool:
-	detach()
+func do_read(curUser: Char) -> void:
+	detach(curUser.backpack)
 	
 	var count: int = 0
 	var affected: Mob = null
@@ -30,7 +30,7 @@ func do_read(curUser: Char) -> bool:
 
 	identify()
 	read_animation()
-	return true
+	return
 
 
 func value() -> int:

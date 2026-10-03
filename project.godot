@@ -11,7 +11,8 @@ config_version=5
 [application]
 
 config/name="GodotDungeon"
-run/main_scene="uid://deog1inp88ww0"
+config/version="0.0.6"
+run/main_scene="uid://bfddpxuot2xua"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -19,7 +20,6 @@ config/icon="res://icon.svg"
 
 MapManager="*uid://ctqbljt0evqr6"
 TurnManager="*uid://bxkd3wkugtruk"
-Bag="*uid://mlxghrbjfkry"
 InputHub="*res://scripts/InputHub.gd"
 AudioManager="*uid://ct7phtnucdfgi"
 GameState="*uid://cuetac6mpcrvv"

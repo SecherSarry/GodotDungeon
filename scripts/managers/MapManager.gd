@@ -8,7 +8,7 @@ extends Node
 func is_walkable(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
 		return false
-	return Terrain.has_flag(LevelManager.map_data[cell.y][cell.x], Terrain.FLAG_PASSABLE)
+	return Terrain.has_flag(LevelManager.level.map_data[cell.y][cell.x], Terrain.FLAG_PASSABLE)
 
 
 func is_occupied(cell: Vector2i, exclude: Actor = null) -> bool:
@@ -22,14 +22,14 @@ func is_occupied(cell: Vector2i, exclude: Actor = null) -> bool:
 func is_door(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
 		return false
-	return LevelManager.map_data[cell.y][cell.x] == Terrain.DOOR
+	return LevelManager.level.map_data[cell.y][cell.x] == Terrain.DOOR
 
 
 ## 把关着的门改成开着的门。成功返回 true；不是门（含上锁门）返回 false。
 func open_door(cell: Vector2i) -> bool:
 	if not is_door(cell):
 		return false
-	LevelManager.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
+	LevelManager.level.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
 	return true
 
 
@@ -38,9 +38,9 @@ func open_door(cell: Vector2i) -> bool:
 func close_door(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
 		return false
-	if LevelManager.map_data[cell.y][cell.x] != Terrain.OPEN_DOOR:
+	if LevelManager.level.map_data[cell.y][cell.x] != Terrain.OPEN_DOOR:
 		return false
-	LevelManager.map_data[cell.y][cell.x] = Terrain.DOOR
+	LevelManager.level.map_data[cell.y][cell.x] = Terrain.DOOR
 	return true
 
 
@@ -48,7 +48,7 @@ func close_door(cell: Vector2i) -> bool:
 func is_locked_door(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
 		return false
-	return LevelManager.map_data[cell.y][cell.x] == Terrain.LOCKED_DOOR
+	return LevelManager.level.map_data[cell.y][cell.x] == Terrain.LOCKED_DOOR
 
 
 ## 给上锁的门解锁：直接变成开着的门。解锁本身耗一回合，由调用方 spend。
@@ -56,7 +56,7 @@ func is_locked_door(cell: Vector2i) -> bool:
 func unlock_door(cell: Vector2i) -> bool:
 	if not is_locked_door(cell):
 		return false
-	LevelManager.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
+	LevelManager.level.map_data[cell.y][cell.x] = Terrain.OPEN_DOOR
 	return true
 
 
@@ -79,7 +79,7 @@ const DIRS8 = [
 func is_explored(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= LevelManager.MAP_WIDTH or cell.y < 0 or cell.y >= LevelManager.MAP_HEIGHT:
 		return false
-	return LevelManager.explored[cell.y][cell.x]
+	return LevelManager.level.explored[cell.y][cell.x]
 
 
 ## 可作为点击目标：已探索格；或"临界未探明格"
@@ -112,7 +112,7 @@ func build_passable(exclude: Char = null, explored_only: bool = true) -> PackedB
 		for x in LevelManager.MAP_WIDTH:
 			var cell := Vector2i(x, y)
 			var ok := is_walkable(cell)
-			if ok and explored_only and not LevelManager.explored[y][x]:
+			if ok and explored_only and not LevelManager.level.explored[y][x]:
 				ok = false
 			if ok and is_occupied(cell, exclude):
 				ok = false
@@ -138,12 +138,13 @@ func teleport(actor: Char, target_cell: Vector2i = Vector2i(-1, -1)) -> String:
 		if not is_walkable(target_cell) or is_occupied(target_cell):
 			return ""
 	actor.grid_pos = target_cell
-	var gs = actor.game_scene
-	if gs != null and gs.has_method("cell_to_world"):
-		actor.position = gs.cell_to_world(target_cell)
-		if actor is Hero:
-			actor.fieldofview()
-			record_sight(actor.FOV)
+	# 位置在表现节点上（数据侧只存 grid_pos）：瞬移一律走 sprite.snap_to，
+	# 它自己经 game_scene.cell_to_world 换算并取消残留滑动。manager 不碰节点、更不碰世界坐标。
+	if actor.sprite != null:
+		actor.sprite.snap_to(target_cell)
+	if actor is Hero:
+		actor.fieldofview()
+		record_sight(actor.FOV)
 	return "{0} 传送至 ({1},{2})".format([actor.name, target_cell.x, target_cell.y])
 
 
@@ -162,4 +163,16 @@ func record_sight(grid: Array) -> void:
 	for y in LevelManager.MAP_HEIGHT:
 		for x in LevelManager.MAP_WIDTH:
 			if grid[y][x]:
-				LevelManager.explored[y][x] = true
+				LevelManager.level.explored[y][x] = true
+
+
+## observe 的固定动作（对齐 SPD Dungeon.observe）：不论此刻看不看得见，贴身 9 格一律记入已探索
+## （原版 `for (int i : PathFinder.NEIGHBOURS9) level.visited[hero.pos + i] = true;`）。
+## 意义：脚下这一圈永远算"走过"——视线被墙角/门缝挡住时，迷雾记忆与寻路落脚点都不会缺一块。
+func record_adjacent(cell: Vector2i) -> void:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var x: int = cell.x + dx
+			var y: int = cell.y + dy
+			if x >= 0 and x < LevelManager.MAP_WIDTH and y >= 0 and y < LevelManager.MAP_HEIGHT:
+				LevelManager.level.explored[y][x] = true

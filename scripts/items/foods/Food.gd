@@ -17,7 +17,7 @@ func actions(hero: Hero):
 func execute(hero: Hero, action: String = default_action) -> void:
 	await super(hero, action)
 	if action == "食用":
-		detach()
+		detach(hero.backpack)
 		satisfy(hero)
 
 		hero.spend(eating_time(hero))

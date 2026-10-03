@@ -27,7 +27,7 @@ var FOV = []
 var buffs: Dictionary = {}
 
 # 角色类别取 HERO_PRIO（Actor 里的优先级表）：与怪物同刻到点时角色先动。
-# Hero 不再自赋——它没有 _init，直接继承本处；Mob 覆写 _init 时以 super() 调到这里再改成 MOB_PRIO。
+# Hero 覆写 _init 时也已 super() 调到这里（它同时在那儿建 belongings）；Mob 覆写 _init 时以 super() 调到这里再改成 MOB_PRIO。
 # 本类若被新子类带 _init 地继承，那个子类必须调 super()，否则本行不执行（见 Actor.gd 注释）。
 func _init() -> void:
 	act_priority = HERO_PRIO
@@ -44,82 +44,25 @@ func can_interact(c: Char):
 func hit_sound():
 	AudioManager.play_sound(preload("res://assets/sounds/hit.mp3"), -5, randf_range(0.9, 1.1))
 
-const MOVE_DURATION = 0.1   # 单格滑动时长（秒），由角色自驱逐帧插值推进
-
 # base_speed / time / spend / act / DUR_* 已上移到 Actor：
 # Buff 与角色共用同一套调度刻度，故这些必须落在共同基类上。
+# 表现（精灵、朝向、自滑插值、血条、动画）已下沉到 ActorNode，本类经 Actor.sprite 发号施令。
 
-
-# 自滑状态：移动时逻辑即时提交 grid，视觉在此处用 _process 逐帧推进
-var _sliding := false
-var _from_pos := Vector2.ZERO
-var _to_pos := Vector2.ZERO
-var _slide_t := 0.0
-
-# 正在播一次性动画（attack/die，非循环、有人 await 它的 animation_finished）。
-# 置位期间 _process 的滑行收尾不得用静止动画覆盖：否则"移动中起手攻击"会被
-# 滑完那一帧切走，被切走的非循环动画不再发 animation_finished，await 永挂 → 回合锁死。
-var _busy := false
-
-# 连续移动会话：为真时滑步结束不回静止动画。多步行走（自动寻路等）由驱动方开启，
-# 使跑步动画跨步连贯播放，而非每步 idle→run 从头重播。
-var keep_moving_anim: bool = false
-
-
+# 本角色在该场景里的服务入口（cell_to_world / 开关门 / 拾取…）。
+# 本次分层不动它——数据侧仍持有场景引用，控制爆炸半径（见计划）。
 var game_scene: Node = null
 
-@onready var anim_sprite = get_sprite()
-
-func get_sprite():
-	for child in get_children():
-		if child is AnimatedSprite2D:
-			return child
-	return null
-
-func set_facing(direction: Vector2i):
-	if anim_sprite:
-		if direction.x < 0:
-			anim_sprite.flip_h = true
-		elif direction.x > 0:
-			anim_sprite.flip_h = false
-
-# 角色"静止(站立)"动画：滑完/攻击结束后回到它。Hero 与 Mob 都是 idle
+# 角色"静止(站立)"动画：滑完/攻击/受击结束后回到它。Hero=idle，Mob=run。
 var rest_anim := "idle"
 
-# ---------- 统一动画入口：所有动画播放都走这里 ----------
-# 规则：
-#  1. 该动画正在播放 → 不重播（连续移动时跑步动画不会每步从第 0 帧重新开始）
-#  2. 连续移动会话中（keep_moving_anim）→ 静止动画不打断当前行走动画
-#  3. 该动画不存在 → 忽略
-func play_anim(anim_name: String) -> void:
-	if anim_sprite == null or not anim_sprite.sprite_frames.has_animation(anim_name):
-		return
-	if keep_moving_anim and anim_name == rest_anim:
-		return
-	if anim_sprite.animation == anim_name and anim_sprite.is_playing():
-		return
-	anim_sprite.play(anim_name)
+# 怪物判据。原为 is_in_group("monster")，分组随节点体系一并消失后改为显式字段：
+# 决定死亡时是"移出调度队列 + 释放节点"（怪）还是"锁操作、留原地"（英雄）。
+var is_monster: bool = false
 
 # 攻击结算信号：攻击方发出，携带受害者与伤害（供 UI/音效等消费者连接）
 signal actor_attacked(attacker, target, damage)
 
-# 受到攻击的简单表现（原地/闪白，当前以 idle 代替）
-func on_hit() -> void:
-	play_anim("idle")
-
-# ---------- 自滑驱动：仅在滑动时逐帧推进插值；到点回本角色静止动画。多角色各自 _process → 天然并行 ----------
-func _process(delta: float) -> void:
-	if not _sliding:
-		return
-	_slide_t += delta
-	var t = clamp(_slide_t / MOVE_DURATION, 0.0, 1.0)
-	position = _from_pos.lerp(_to_pos, t)
-	if t >= 1.0:
-		_sliding = false
-		if not _busy:
-			play_anim(rest_anim)   # 滑完回静止动画；连续移动中的抑制由 play_anim 内部规则处理
-
-# ---------- 移动：逻辑即时提交 grid + 启动自滑，立即返回，不等待动画（并行移动不阻塞回合） ----------
+# ---------- 移动：逻辑即时提交 grid + 令表现层启动自滑，立即返回，不等待动画（并行移动不阻塞回合） ----------
 func walk_to(target: Vector2i) -> bool:
 	var gs = game_scene
 	if gs == null or MapManager.is_occupied(target, self):
@@ -130,7 +73,7 @@ func walk_to(target: Vector2i) -> bool:
 	# 正交相邻才解锁——隔着格子或斜着都够不着门锁。
 	if MapManager.is_locked_door(target):
 		if absi(step.x) + absi(step.y) == 1 and MapManager.unlock_door(target):
-			set_facing(step)
+			if sprite: sprite.set_facing(step)
 			return true
 		return false
 
@@ -141,36 +84,19 @@ func walk_to(target: Vector2i) -> bool:
 	if not MapManager.is_walkable(target):
 		return false
 	var delta = target - grid_pos
-	set_facing(delta)
-	_from_pos = position
-	_to_pos = gs.cell_to_world(target)
+	if sprite: sprite.set_facing(delta)
 	grid_pos = target   # 逻辑权威：同帧生效，供占用/视野判定
-	_sliding = true
-	_slide_t = 0.0
-	play_anim("run")
+	if sprite: sprite.slide_to(target)   # 视觉从当前位置滑向新格，由 _process 收尾
 	return true
 
 # 是否正在滑行（供回合编排等待所有并行滑动收尾）
 func is_moving() -> bool:
-	return _sliding
+	return sprite != null and sprite.is_moving()
 
 # 瞬移到某格（换层/传送等）：取消残留滑动并直接摆位，避免插值把角色拽回旧位置
 func snap_to(cell: Vector2i) -> void:
-	_sliding = false
 	grid_pos = cell
-	var gs = game_scene
-	if gs != null:
-		position = gs.cell_to_world(cell)
-
-# ---------- 连续移动会话（供自动行走等驱动方使用） ----------
-func begin_continuous_move() -> void:
-	keep_moving_anim = true
-
-func end_continuous_move() -> void:
-	keep_moving_anim = false
-	# 停在原地即刻回静止动画；仍在滑则交给 _process 收尾；正在死亡则不覆盖 die 动画
-	if not _sliding and not _dying:
-		play_anim(rest_anim)
+	if sprite: sprite.snap_to(cell)
 
 # ---------- 寻路步进（英雄自动行走与怪物追踪共用） ----------
 # 朝 target 计算下一步（8 方向、避障、可绕房间走廊）；无路可走返回 (-1,-1)。
@@ -294,7 +220,7 @@ func _cast_light(origin: Vector2i, row: int, start: float, end: float,
 func _blocks_sight(cell_x: int, cell_y: int) -> bool:
 	if cell_x < 0 or cell_x >= LevelManager.MAP_WIDTH or cell_y < 0 or cell_y >= LevelManager.MAP_HEIGHT:
 		return true
-	return Terrain.has_flag(LevelManager.map_data[cell_y][cell_x], Terrain.FLAG_LOS_BLOCKING)
+	return Terrain.has_flag(LevelManager.level.map_data[cell_y][cell_x], Terrain.FLAG_LOS_BLOCKING)
 
 func _set_visible(cell_x: int, cell_y: int) -> void:
 	if cell_x < 0 or cell_x >= LevelManager.MAP_WIDTH or cell_y < 0 or cell_y >= LevelManager.MAP_HEIGHT:
@@ -322,14 +248,10 @@ func attack(enemy: Char, dmg_multi: float = 1.0, dmg_bonus: float = 0.0, acc_mul
 
 	spend(DUR_ATTACK)   # 攻击计时由本函数自负：英雄走场景直驱、怪物走调度器，都无需再记账
 
-	# 朝向目标，自播攻击动画与音效；动画播完再结算
-	set_facing(enemy.grid_pos - grid_pos)
-	
-	_busy = true
-	play_anim("attack")
-	if anim_sprite and anim_sprite.sprite_frames.has_animation("attack"):
-		await anim_sprite.animation_finished
-	_busy = false
+	# 朝向目标，自播攻击动画与音效；动画播完再结算（动画由表现层自管，此处只 await）
+	if sprite:
+		sprite.set_facing(enemy.grid_pos - grid_pos)
+		await sprite.play_once("attack")
 
 	# 战斗步骤二：命中检定（含命中修正 acc_multi）
 	
@@ -351,11 +273,11 @@ func attack(enemy: Char, dmg_multi: float = 1.0, dmg_bonus: float = 0.0, acc_mul
 		enemy.damage(effective_damage, self)
 		print(self.name, " 攻击 ", enemy.name, " 造成 ", effective_damage, " 点伤害")
 		emit_signal("actor_attacked", self, enemy, effective_damage)
-		play_anim(rest_anim)   # 攻完回到静止动画（Hero=idle，Mob=run）
+		if sprite: sprite.play_anim(rest_anim)   # 攻完回到静止动画（Hero=idle，Mob=run）
 		return true
-			
+
 	else:
-		play_anim(rest_anim)   # 未命中也要收回动画
+		if sprite: sprite.play_anim(rest_anim)   # 未命中也要收回动画
 		return false
 
 
@@ -410,17 +332,32 @@ func speed() -> float:
 	return speed
 	
 # 战斗步骤七：承受伤害	
-func damage(dmg: int, src = null):
+func damage(dmg: int, src = null) -> void:
 	if !is_alive() or dmg<0:
 		return
+	
+	var damage = dmg
+	
+	var t: Terror = get_buff(Terror)
+	if t != null:
+		t.recover()
 	if (self.has_buff(MagicalSleep)):
 		self.get_buff(MagicalSleep).detach()
-	hp = max(hp - dmg, 0)
+	
+	dmg = roundi(damage)
+	
+	var shielded: int = dmg
+	
+	shielded -= dmg
+	hp -= dmg
+	
+	if hp < 0:
+		hp = 0
 	# 受击自反应（非致死一击；致死那下交给 destory 播 die，避免动画重叠）
-	if is_alive():
-		on_hit()
-	else:
+	if not is_alive():
 		die( src )
+	elif 1:
+		pass
 	
 # ---------- 死亡：自播 die 并自理清理 ----------
 # 整合了原 start_dying/_on_death_started/_on_death_finished：
@@ -433,19 +370,16 @@ func destory():
 		return
 	_dying = true
 	hp = 0
-	var is_monster := is_in_group("monster")
 	if is_monster:
-		TurnManager.monsters.erase(self)   # 立刻移出行动列表，避免死亡动画期间再被调度
+		TurnManager.unregister_actor(self)   # 立刻移出行动列表，避免死亡动画期间再被调度
 	else:
 		var gs = game_scene
 		if gs and gs.has_method("set_hero_dead"):
 			gs.set_hero_dead()
-	if anim_sprite and anim_sprite.sprite_frames.has_animation("die"):
-		_busy = true
-		play_anim("die")
-		await anim_sprite.animation_finished
-	if is_monster:
-		queue_free()   # 怪物移除；英雄保留在原地
+	if sprite != null:
+		await sprite.play_die()
+		if is_monster:
+			sprite.queue_free()   # 怪物移除；英雄保留在原地
 
 func die( src = null ):
 	destory()
@@ -485,6 +419,57 @@ func get_buff(key) -> Buff:
 # 供调度器收集：所有挂在身上的 buff（值即实例）
 func all_buffs() -> Array:
 	return buffs.values()
+
+# ---------- 存档 ----------
+# 角色共同的持久状态都收在这里，Hero / Mob 各 super() 一次再补自己的部分。
+# 不存的：Actor.time（时间轴，读档一律归零，玩家先动）、sprite / game_scene（表现，场景重建）、
+# FOV（每回合重算）、rest_anim / is_monster（按类固定，_init 里定）。
+# alignment 存 int（枚举）：怪物是 ENEMY=0，动森等非敌对角色的阵营也靠它区分。
+func serialize() -> Dictionary:
+	return {
+		# Vector2i 进不了 JSON：拆成 [x, y]，读回来再拼。
+		"grid_pos": [grid_pos.x, grid_pos.y],
+		"max_hp": max_hp,
+		"hp": hp,
+		"base_speed": base_speed,
+		"paralysed": paralysed,
+		"rooted": rooted,
+		"flying": flying,
+		"invisible": invisible,
+		"alignment": alignment,
+		"view_distance": view_distance,
+		"buffs": _serialize_buffs(),
+	}
+
+func deserialize(data: Dictionary) -> void:
+	var gp = data.get("grid_pos", null)
+	if gp != null:
+		grid_pos = Vector2i(int(gp[0]), int(gp[1]))
+	# 逐项 int()/float() 归一：JSON 数字读回来一律是 float。带默认值退回当前值，防旧档缺字段。
+	max_hp = int(data.get("max_hp", max_hp))
+	hp = int(data.get("hp", hp))
+	base_speed = float(data.get("base_speed", base_speed))
+	paralysed = int(data.get("paralysed", 0))
+	rooted = bool(data.get("rooted", false))
+	flying = bool(data.get("flying", false))
+	invisible = int(data.get("invisible", 0))
+	# alignment 是未注解的枚举，可能是 null：只在存档里确有其值时才覆盖，别把 null 当 0 收成 ENEMY。
+	var al = data.get("alignment", null)
+	if al != null:
+		alignment = int(al)
+	view_distance = int(data.get("view_distance", view_distance))
+
+	# buff 先清空再挂：复用实例时不至于把上一次的 buff 留着叠加。
+	# 必须最后做——from_data 以当前 Actor.now 为锚（读档时时钟已由 GameState._reset_run 归零）。
+	buffs.clear()
+	for bd in data.get("buffs", []):
+		Buff.from_data(self, bd)
+
+func _serialize_buffs() -> Array:
+	var out := []
+	for b in all_buffs():
+		out.append(b.serialize())
+	return out
 
 # 时间轴归零（换层等场合：让玩家先动）。
 # buff 必须同步减去同一个量，而不是各自归零：buff 的 time 兼作到期时刻

@@ -1,1 +1,1 @@
-extends Meleeweapon
+extends MeleeWeapon

@@ -17,7 +17,16 @@ var hero: Hero:
 @onready var rest_button = $CanvasLayer/RestButton     # 休息一拍按钮
 @onready var sleep_button = $CanvasLayer/SleepButton   # 长休息按钮（一直休息，再按退出）
 @onready var buff_list = $CanvasLayer/BuffList          # 身上 buff 一览
-@onready var talent_list = $CanvasLayer/TalentList
+
+@onready var level_label = $CanvasLayer/HeroStatue/Panel/LevelLabel
+@onready var health_bar = $CanvasLayer/HeroStatue/Panel/HealthBar
+@onready var health_bar_label = $CanvasLayer/HeroStatue/Panel/HealthBar/Label
+@onready var exprience_bar = $CanvasLayer/HeroStatue/Panel/ExprienceBar
+@onready var exprience_bar_label = $CanvasLayer/HeroStatue/Panel/ExprienceBar/Label
+@onready var hunger_bar = $CanvasLayer/HeroStatue/Panel/HungerBar
+@onready var hunger_bar_label = $CanvasLayer/HeroStatue/Panel/HungerBar/Label
+@onready var talent_list = $CanvasLayer/HeroStatue/TalentList
+
 
 # ---------- 图块映射 ----------
 const TILE_CHASM = Vector2i(8, 1)
@@ -63,8 +72,7 @@ func _ready():
 	InputHub.map_click_requested.connect(_on_map_click)
 	InputHub.zoom_requested.connect(_on_zoom_requested)
 	
-	Bag.inventory_updated.connect(_on_inventory_updated)
-	SaveManager.entity_provider = capture_entities   # 当前层的怪/物由本场景采集（SaveManager 不认节点）
+	hero.backpack.inventory_updated.connect(_on_inventory_updated)
 	inventory_ui.game_scene = self   # 必须先于任何会触发 inventory_updated 的操作，否则 refresh 拿到空 game_scene
 	inventory_ui.item_chosen.connect(_on_item_chosen)
 	inventory_ui.selection_cancelled.connect(_on_item_selection_cancelled)
@@ -75,7 +83,8 @@ func _ready():
 	# 同一项连点第二次不会再触发（连升两级就卡住了）；item_clicked 每次都发。
 	talent_list.item_clicked.connect(_on_talent_list_item_clicked)
 
-	Scroll.init_nickname()
+	# 卷轴假名的重洗归 GameState.new_game()（只在新档做一次）。此处**不能**再洗：
+	# GameState.anonymous_names 是 static，读取时 GameState.deserialize 刚把存档值还原，这里一洗就冲掉。
 	init_layers()
 
 	# 地格选取器：在 Layers 之后加入，才能盖住迷雾层绘制高亮（投掷/施法等复用）
@@ -90,41 +99,41 @@ func _ready():
 	_selector.confirmed.connect(_on_cell_confirmed)
 	_selector.cancelled.connect(_on_selector_cancelled)
 
-	# 一局开始：全局时钟归零。原版开局在 Dungeon 里调 Actor.clear()，其中一半就是 now = 0；
-	# 本工程的"新的一局"入口是本场景的 _ready（换层不重建场景，只在下面那个函数里就地重绘）。
-	# 必须早于 render_hero：Hero._ready → init() 会给英雄挂 Hunger，而 buff 的锚点是 Actor.now
-	# （见 Buff.attach_to）。static var 不随场景重载还原，同一进程里开第二局时它仍是上局的数——
-	# 不归零，Hunger 就会锚在上局的时钟上，英雄迟迟不饿。
-	Actor.now = 0.0
-	# 世界锁同理归零：上局若停在英雄身上（正常局终态），第二局开局的锁会指向已释放的旧英雄。
-	# process 每轮开头都会清锁，故这只是让"开局无主"这件事显式成立，不依赖它自愈。
-	Actor.current = null
-
-	# 清空背包必须早于 render_hero：开局的物品是 Hero._ready → heroClass.init_hero 发进包的，
-	# 而下面的 add_child(hero) 会当场触发 Hero._ready。若仍把 clear 放在其后，刚发的一整套会被清光。
-	# （refresh 不受影响：它在更下面，读到的是清过又灌满的包。）
-	Bag.init_starting_inventory()
-
+	# 一局的建立（清场 / 建英雄 / 初始化或读档 / 生成或载入楼层）全在 GameState.new_game / load_game 里，
+	# 本场景只负责显示：进来时数据都已就绪，这里只管建节点、摆位、画图。
 	render_hero()
 	render_monsters()   # 按 MapManager 决策的怪物格渲染怪物节点
 	render_items()   # 按 MapManager 决策的物品清单渲染地面物品
 
-	camera.global_position = hero.global_position
+	if hero.sprite: camera.global_position = hero.sprite.global_position   # 位置在表现节点上，数据侧只存 grid_pos
 	camera.zoom = Vector2.ONE
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
 	
-	update_fov()
+	observe()
 	inventory_ui.refresh()
 
 func _process(delta):
-	camera.global_position = hero.global_position
+	if hero.sprite: camera.global_position = hero.sprite.global_position   # 位置在表现节点上，数据侧只存 grid_pos
 	
-	var text = "HP: " + str(hero.hp) + "/" + str(hero.max_hp) + "\n"
-	text += "STR: " + str(hero.str) + "\n"
-	text += "lvl: " + str(hero.lvl) + "\n"
-	text += "exp: " + str(hero.exp)+ "/" + str(hero.max_exp()) + "\n"
-	text += "饥饿度: " + str(hero.get_buff(Hunger).hunger())+ "/450\n"
+	level_label.text = "Lv.%d" % hero.lvl
+	
+	health_bar.value = hero.hp
+	health_bar.max_value = hero.max_hp
+	health_bar_label.text = "%d/%d (%.2f)" % [hero.hp, hero.max_hp, hero.get_buff(Regeneration).partical_regen]
+	
+	exprience_bar.value = hero.exp
+	exprience_bar.max_value = hero.max_exp()
+	exprience_bar_label.text = "%d/%d" % [hero.exp, hero.max_exp()]
+	
+	hunger_bar.value = hero.get_buff(Hunger).level
+	if hero.is_starving():
+		hunger_bar_label.text = "%d/450 (%.2f)" % [hero.get_buff(Hunger).level, hero.get_buff(Hunger).partical_damage]
+	else:
+		hunger_bar_label.text = "%d/450" % [hero.get_buff(Hunger).level]
+		
+	
+	var text = "STR: " + str(hero.str) + "\n"
 	if hero.weapon != null:
 		text += "当前武器: " + hero.weapon.title() + "(" + str(hero.weapon.min()) + "-" + str(hero.weapon.max()) + ")\n"
 	else:
@@ -151,7 +160,8 @@ func _refresh_buff_list():
 	var labels: Array = []
 	if hero != null:
 		for buff: Buff in hero.all_buffs():
-			labels.append(buff.name()+" "+buff.desc())
+			if buff.announced or buff is FlavourBuff:
+				labels.append(buff.name()+" "+buff.desc())
 	if labels == _buff_cache:
 		return   # 无变化不重建：避免每帧 clear/add_item 的无谓分配与列表闪烁
 	buff_list.clear()
@@ -223,7 +233,7 @@ func init_water_layer():
 	var water_cells: Array[Vector2i] = []
 	for y in LevelManager.MAP_HEIGHT:
 		for x in LevelManager.MAP_WIDTH:
-			if LevelManager.map_data[y][x] == Terrain.WATER:
+			if LevelManager.level.map_data[y][x] == Terrain.WATER:
 				water_layer.draw_cell(Vector2i(x, y), 0)
 				water_cells.append(Vector2i(x, y))
 	if water_cells.is_empty():
@@ -240,7 +250,7 @@ func refresh_foglayer():
 	for y in LevelManager.MAP_HEIGHT:
 		for x in LevelManager.MAP_WIDTH:
 			var pos = Vector2i(x, y)
-			if LevelManager.explored[y][x]:
+			if LevelManager.level.explored[y][x]:
 				if hero.FOV[y][x]:
 					fog_layer.set_cell(pos, -1)
 				else:
@@ -248,34 +258,29 @@ func refresh_foglayer():
 			else:
 				fog_layer.set_cell(pos, 0, TILE_FOG_UNSEEN)
 
-func update_fov():
-	hero.fieldofview()                  # 视野由英雄自己按 view_distance 算，写入 hero.FOV
-	_reveal_by_mind_vision()            # 灵视在英雄 FOV 之上额外点亮（尚未落账）
-	MapManager.record_sight(hero.FOV)   # 落账进已探索：唯一写入点，故须排在灵视之后
-	refresh_foglayer()
-	update_monsters_visibility()
+# 本函数是 SPD Dungeon.observe()（Dungeon.java:897）的对应物：重算英雄 FOV → 落账进已探索 →
+# 刷迷雾与实体可见性。逐步对应：fieldofview=level.updateFieldOfView、record_sight=BArray.or(visited,heroFOV)、
+# record_adjacent=贴身 NEIGHBOURS9 那行、refresh_foglayer=GameScene.updateFog、
+# update_*_visibility=GameScene.afterObserve。原版 observe 里其余分支（Awareness / TalismanOfForesight /
+# RevealedArea / MagicalSight / DivineSense / 友军视野）本工程无对应 buff 或物品，暂不移植。
+# 视野刷新：对应 SPD Dungeon.observe() 的场景侧收尾（GameScene.updateFog + afterObserve）。
+# 数据侧（重算 FOV / 落账 / 贴身 9 格）已迁到 LevelManager.observe()，这里只负责"调它 + 渲染"。
+func observe():
+	LevelManager.observe()
+	refresh_foglayer()               # = GameScene.updateFog：按 hero.FOV 重画迷雾层
+	update_monsters_visibility()     # = GameScene.afterObserve：怪/物的可见性跟 hero.FOV
 	update_items_visibility()
 
-# 灵视：把每个生物及其九宫格补进英雄视野（fieldofview 每次先清空 FOV 再重算，
-# 故 buff 一掉，这些格自然恢复黑暗；explored 已记下，地形仍留在迷雾记忆中）。
-func _reveal_by_mind_vision():
-	if not hero.has_buff(MindVision):
-		return
-	var cells := []
-	for mob in TurnManager.monsters:
-		if is_instance_valid(mob):
-			cells.append(mob.grid_pos)
-	hero.reveal_around(cells, MindVision.RADIUS)
-	
 func update_monsters_visibility():
 	for mob in TurnManager.monsters:
-		if is_instance_valid(mob):
-			var cell = mob.grid_pos
-			# 检查坐标是否在有效范围内
-			if cell.x >= 0 and cell.x < LevelManager.MAP_WIDTH and cell.y >= 0 and cell.y < LevelManager.MAP_HEIGHT:
-				mob.visible = hero.FOV[cell.y][cell.x]
-			else:
-				mob.visible = false
+		if not is_instance_valid(mob.sprite):
+			continue   # 数据在列、表现已释放（正在播完死亡动画等）：无可见性可谈
+		var cell = mob.grid_pos
+		# 检查坐标是否在有效范围内
+		if cell.x >= 0 and cell.x < LevelManager.MAP_WIDTH and cell.y >= 0 and cell.y < LevelManager.MAP_HEIGHT:
+			mob.sprite.visible = hero.FOV[cell.y][cell.x]
+		else:
+			mob.sprite.visible = false
 				
 func update_items_visibility():
 	for item_node in items_on_floor:
@@ -286,35 +291,45 @@ func update_items_visibility():
 			else:
 				item_node.visible = false
 				
-# ---------- 放置英雄：实例化 Hero.tscn 后摆到 MapManager 决策的出生点并加入场景树 ----------
+# ---------- 放置英雄：只建表现节点并摆位；数据初始化已由 GameState 在进场景前完成 ----------
+# 落点（grid_pos）由 GameState.new_game / load_game 决定，本场景不再决定英雄站哪。
+# 顺序要点：node.actor_data 必须在 add_child **之前**赋值——ActorNode._ready 要读
+# actor_data.max_hp / rest_anim 来配血条与起播动画；进树后才摆位则无闪现。
 func render_hero():
-	hero.grid_pos = LevelManager.hero_spawn
-	hero.position = terrain_layer.map_to_local(hero.grid_pos)
 	hero.game_scene = self
-	hero.z_index = CHAR_Z   # 角色压在地面物品之上
-	add_child(hero)   # 触发 Hero._ready（init_hero 初始化属性）；摆位后才进树，无闪现
-	hero.play_anim("idle")   # 生成即静止动画
+	var node = preload("res://tscns/Hero.tscn").instantiate()
+	node.actor_data = hero
+	hero.sprite = node
+	node.position = terrain_layer.map_to_local(hero.grid_pos)
+	node.z_index = CHAR_Z   # 角色压在地面物品之上
+	add_child(node)   # 触发 ActorNode._ready：套帧集、起播静止动画
 	# 开局回到空闲态：输入门闩得打开（is_ready），否则 is_player_turn 恒为假、点击全被挡。
-	# 必须留在这里而不是靠 Hero 的字段默认值：GameState.hero 是 autoload 里只 new 一次的常驻实例，
-	# 同一进程开第二局不会重跑字段初值（同上面 Actor.now / Actor.current 归零那条）。
+	# 新英雄的字段初值是 false，但 enter_ready 还负责清 cur_action / path，故这里照调。
 	hero.enter_ready()
-	TurnManager.register_actor(hero)
+	TurnManager.register_hero(hero)
 
-# ---------- 渲染怪物：按 LevelManager.monster_cells 实例化怪物节点 ----------
+# ---------- 渲染怪物：按 LevelManager.level.monster_cells 生成数据并挂上通用表现节点 ----------
 func render_monsters():
 	# 有本层快照（读档或回访）→ 按快照重建（含存下的血量）。
 	var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
 	if not ents.is_empty():
 		_render_monsters_from(ents.get("monsters", []))
 		return
-	for cell in LevelManager.monster_cells:
-		var mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
-		mob.grid_pos = cell
-		mob.position = terrain_layer.map_to_local(cell)
-		mob.game_scene = self
-		mob.z_index = CHAR_Z   # 角色压在地面物品之上
-		add_child(mob)
-		TurnManager.register_actor(mob)
+	for cell in LevelManager.level.monster_cells:
+		_spawn_monster(Rat.new(), cell)
+
+# 一条怪 = 一份数据 + 一个通用表现节点（Mob.tscn）。
+# 帧集不在场景里、由 ActorNode 按数据的实际类套（见 ActorNode.MONSTER_FRAMES），故换怪种不必换场景。
+func _spawn_monster(data: Char, cell: Vector2i) -> void:
+	data.grid_pos = cell
+	data.game_scene = self
+	var node = preload("res://tscns/Mob.tscn").instantiate()
+	node.actor_data = data      # 必须先于 add_child：ActorNode._ready 读 actor_data 配血条 / 帧集
+	data.sprite = node
+	node.position = terrain_layer.map_to_local(cell)
+	node.z_index = CHAR_Z       # 角色压在地面物品之上
+	add_child(node)
+	TurnManager.register_monster(data)
 
 # 世界服务：格子 → 屏幕像素（格中心）。移动目标像素供 Char.walk_to 取用，
 # 角色自身 _process 做并行自滑，这里不再包揽滑动动画。
@@ -338,7 +353,7 @@ func _on_before_monster_turn():
 	pass
 
 func _on_after_monster_turn():
-	update_fov()
+	observe()
 
 # ---------- 英雄死亡状态：由 Char.destory 在动画开始前调用；只改状态与 UI，不播动画 ----------
 func set_hero_dead():
@@ -362,9 +377,9 @@ func clear_map():
 			item_node.queue_free()
 	items_on_floor.clear()
 	for mob in TurnManager.monsters.duplicate():
-		if is_instance_valid(mob):
-			mob.queue_free()
-	TurnManager.monsters.clear()
+		if is_instance_valid(mob.sprite):
+			mob.sprite.queue_free()
+		TurnManager.unregister_actor(mob)   # 数据也要摘：data 是引用计数对象，is_instance_valid 判不了"死没死"
 
 # ---------- 缩放 ----------
 func zoom_map(factor: float):
@@ -429,9 +444,10 @@ func _on_map_click():
 func _on_zoom_requested(factor: float):
 	zoom_map(factor)
 
-# 缩放放大按钮：按下即放大 0.2
+# 缩放放大按钮：按下即放大 0.2，顺手存一次档（当前层由 GameState 连实体一起收进缓存后落盘）
 func _on_zoom_in_button_pressed():
 	zoom_map(InputHub.ZOOM_STEP)
+	GameState.save_game(0, capture_entities())
 
 # ---------- 玩家动作的入口 ----------
 # 曾经的 try_hero_action 一拆三：这一格有什么 → Hero.handle（造 curAction）、
@@ -447,76 +463,91 @@ func _issue(cell: Vector2i):
 	await TurnManager.process()
 
 # ---------- 换层 ----------
-# 数据侧（存档 / 进层 / 落点）交给 LevelManager.switch_level；本场景负责节点侧：
-# 开走前采集实体快照，回来后按落点重建视图。到顶则 switch_level 返回空字典，什么也不做。
-# 公开：Hero.act_transition 走到出入口后从角色侧回调（原来只有本场景的 try_hero_action 调）。
-func change_floor(depth: int) -> void:
-	var result = LevelManager.switch_level(depth, capture_entities())
+# 对齐原版 Level.activateTransition + InterlevelScene.descend/ascend：按踩到的 transition 类型选方向，
+# 数据侧（存旧层 / 定目标层 / 落点）交给 LevelManager；本场景只负责节点侧——开走前采集实体快照，
+# 回来后按落点重建视图。到顶（从第 1 层往上）LevelManager 返回空字典，什么也不做。
+# 公开：Hero.act_transition 走到出入口后从角色侧回调。
+func activate_transition(transition: LevelTransition) -> void:
+	var entities := capture_entities()
+	var result: Dictionary
+	# EXIT / BRANCH_EXIT 向下（descend），其余（ENTRANCE / SURFACE）向上（ascend）——原版 Level.activateTransition 同。
+	if transition.type == LevelTransition.Type.REGULAR_EXIT or transition.type == LevelTransition.Type.BRANCH_EXIT:
+		result = LevelManager.descend(transition, entities)
+	else:
+		result = LevelManager.ascend(transition, entities)
 	if result.is_empty():
 		return
-	rebuild_level(result["landing"], result["restored"])
+	rebuild_level(result["landing"])
 
 # ---------- 采集当前层活实体 → 快照（怪的位置与血量、地面物品） ----------
 func capture_entities() -> Dictionary:
+	# 怪直接交整份 mob.serialize()（含种类 / 血量 / 位置 / AI 状态 / buff），
+	# 不再只记 {位置, 血量} —— 那样重建时只能硬编回 Rat，且状态全丢。
 	var monsters := []
 	for mob in TurnManager.monsters:
 		if is_instance_valid(mob):
-			monsters.append({ "cell": mob.grid_pos, "hp": mob.hp, "max_hp": mob.max_hp })
+			monsters.append(mob.serialize())
 	var items := []
 	for node in items_on_floor:
 		if is_instance_valid(node):
 			items.append({ "cell": node.grid_pos, "item": node.item_data })
 	return { "monsters": monsters, "items": items }
 
-# 换层后重建视图：清旧实体、重绘地图层、摆好英雄、按快照或新生成渲染怪/物。
-# 由 change_floor 在 LevelManager 完成数据侧后调用（唯一调用方是 Hero.act_transition，
-# 而它之后会调 enter_ready 清掉 cur_action / path，故此处不必再清英雄的动作状态）。
-func rebuild_level(landing: Vector2i, restored: bool) -> void:
+# 换层后重建视图：清旧实体、重绘地图层、摆好英雄、渲染怪/物。
+# 由 activate_transition 在 LevelManager 完成数据侧后调用（唯一调用方是 Hero.act_transition，
+# 而它之后会调 enter_ready 清掉 cur_action / path；英雄落点与时间轴已由 LevelManager.switch_level 摆好）。
+# 渲染怪/物各自会先查本层快照（读档或回访）→ 命中则按快照重建，未命中才走新生成。
+func rebuild_level(landing: Vector2i) -> void:
 	# 清掉旧层实体
 	for item_node in items_on_floor:
 		if is_instance_valid(item_node):
 			item_node.queue_free()
 	items_on_floor.clear()
 	for mob in TurnManager.monsters.duplicate():
-		if is_instance_valid(mob):
-			mob.queue_free()
-	TurnManager.monsters.clear()
+		if is_instance_valid(mob.sprite):
+			mob.sprite.queue_free()
+		TurnManager.unregister_actor(mob)   # 同 clear_map：节点释放与数据摘除缺一不可
 	# 重绘地图层（先清后画，否则残留上一层瓦片）
 	terrain_layer.clear()
 	walls_layer.clear()
 	water_layer.clear()
 	fog_layer.clear()
 	init_layers()
-	# 英雄摆到落点，并清空时间轴（玩家先动）；buff 随宿主一同归零，否则换层后再也轮不到
+	# 英雄摆到落点（数据落点与时间轴已由 switch_level 摆好，这里只管把表现节点挪过去）
 	hero.snap_to(landing)
-	hero.reset_timeline()
-	if restored:
-		var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
-		_render_monsters_from(ents.get("monsters", []))
-		_render_items_from(ents.get("items", []))
-	else:
-		render_monsters()
-		render_items()
-	camera.global_position = hero.global_position
-	update_fov()
+	render_monsters()
+	_displace_mobs_from_hero()
+	render_items()
+	if hero.sprite: camera.global_position = hero.sprite.global_position   # 位置在表现节点上，数据侧只存 grid_pos
+	observe()
 	inventory_ui.refresh()
 
-# 从快照重建怪（位置 + 血量）；HP 在 add_child 之后设，避免被 _ready 的初始值覆盖
+# 落点若有怪与英雄同格，把怪挪到最近的空邻格（对齐原版 Dungeon.switchLevel 的 displace mob）。
+# 8 方向里取第一个"可走且无其他角色"的格子；退而找不到就留在原地（原版同：不再找、不动）。
+# 必须走 Char.snap_to：它同时写数据 grid_pos 与表现节点，只改 grid_pos 会让精灵留在旧格。
+func _displace_mobs_from_hero() -> void:
+	var hero_cell: Vector2i = hero.grid_pos
+	for mob in TurnManager.monsters:
+		if not is_instance_valid(mob) or mob.grid_pos != hero_cell:
+			continue
+		for d in MapManager.DIRS8:
+			var cell: Vector2i = hero_cell + d
+			if MapManager.is_walkable(cell) and not MapManager.is_occupied(cell):
+				mob.snap_to(cell)
+				break
+
+# 从快照重建怪：整只 mob.serialize() 交给 Mob.from_data 复原（种类 / 血量 / 位置 / 状态 / buff）。
+# 血量在挂节点**之前**已由 deserialize 写进数据：ActorNode._ready 会用 max_hp 配血条上限，晚了就对不齐。
 func _render_monsters_from(snapshot: Array) -> void:
 	for m in snapshot:
-		var mob: Mob = preload("res://scripts/actors/mobs/rat/Rat.tscn").instantiate()
-		mob.grid_pos = m["cell"]
-		mob.position = terrain_layer.map_to_local(m["cell"])
-		mob.game_scene = self
-		add_child(mob)
-		mob.max_hp = m["max_hp"]
-		mob.hp = m["hp"]
-		mob.z_index = CHAR_Z   # 角色压在地面物品之上
-		TurnManager.register_actor(mob)
+		var data = Mob.from_data(m)
+		if data == null:
+			continue   # 脚本路径失效（怪种被删/改名）：跳过，不让一只读不回来的怪拖崩整层
+		_spawn_monster(data, data.grid_pos)
 
 func _render_items_from(snapshot: Array) -> void:
 	for e in snapshot:
-		# 快照里的物品可能为空（Item.serialize 尚未实现，存下来的每件都是 {}）：
+		# 快照里的物品可能为空（存档时脚本路径失效、Item.from_data 返回 null 的那类）：
 		# 空项一律跳过，不能喂给 create_floor_item——它会在合并循环里对 null 取 .name() 崩掉。
 		if e.get("item", null) == null:
 			continue
@@ -532,14 +563,14 @@ func get_cell_from_mouse_pos() -> Vector2i:
 	return Vector2i(-1, -1)
 
 # ---------- 物品系统 ----------
-# 渲染地面物品：按 LevelManager.item_placements 实例化 Item 节点（含同格合并逻辑沿用 create_floor_item）
+# 渲染地面物品：按 LevelManager.level.item_placements 实例化 Item 节点（含同格合并逻辑沿用 create_floor_item）
 func render_items():
 	# 有本层快照（读档或回访）→ 按快照重建；物品内容仍缺序列化，空项由 _render_items_from 跳过。
 	var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
 	if not ents.is_empty():
 		_render_items_from(ents.get("items", []))
 		return
-	for placement in LevelManager.item_placements:
+	for placement in LevelManager.level.item_placements:
 		create_floor_item(placement["item"], placement["cell"])
 
 func create_floor_item(item_data: Item, cell: Vector2i):
