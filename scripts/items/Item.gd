@@ -188,34 +188,41 @@ func merge(other: Item) -> Item:
 		other.item_quantity = 0
 	return self
 
+# 拾取入口：把本物品塞进容器。注意本方法**绕过** Bag.add_item / remove_item——
+# 那几个方法才发 inventory_updated，而拾取不走它们。故这里每次改动容器内容后
+# 必须自己补发一次，否则背包 UI（只监听 hero.backpack.inventory_updated）不会重建，
+# 拾到的东西在面板上不出现，看着像"没捡起来"。合并进同类堆时也要发：列表项数没变，
+# 但数量标签（"x N"）变了。
 func collect(container: Bag = hero.backpack) -> bool:
 	if item_quantity < 0:
 		return true
-	
+
 	var items: Array = container.items
-	
+
 	if self in items:
 		return true
-	
+
 	for item: Item in items:
 		if item is Bag and item.can_hold(self):
 			if collect(item):
 				return true
-	
+
 	if not container.can_hold(self):
 		return false
-	
+
 	if stackable:
 		for item in items:
 			if is_similar(item):
 				item.merge(self)
+				container.inventory_updated.emit()
 				return true
-	
+
 	if hero != null and hero.is_alive():
 		Talent.on_item_collected(hero, self)
-		
+
 	items.append(self)
-	
+	container.inventory_updated.emit()
+
 	return true
 
 func split(amount: int) -> Item:

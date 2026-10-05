@@ -49,6 +49,12 @@ func get_monster_at(cell: Vector2i):
 			return mob
 	return null
 
+# 取某格上的角色（英雄或怪）。直译 SPD Actor.findChar——在已注册的角色里找 pos 命中的那个。
+func find_char(cell: Vector2i):
+	if is_instance_valid(hero) and hero.grid_pos == cell:
+		return hero
+	return get_monster_at(cell)
+
 # ---------- 时间轴调度器 ----------
 # 直译 SPD Actor.process()：一个循环，每轮清锁 → 挑 time 最小者 → now = 它的 time → 调 act()。
 # 不再有"怪物整批回合"：所有 actor（角色 + 身上 buff）在同一条时间轴上按 time 排，最小者先动。
@@ -87,6 +93,12 @@ func all_actors() -> Array:
 		if is_instance_valid(mob):
 			list.append(mob)
 			list.append_array(mob.all_buffs())
+	# 层上的 blob（毒气一类场地效应）也是 actor：按 BLOB_PRIO 排在英雄之后、怪之前。
+	# 真相源就是 level.blobs 本身，不另建数组（同上面 buff 的做法），故无需显式注册/注销。
+	# 直译 SPD Actor.init()：那边把 level.blobs.values() 一并 add 进行动表。
+	for blob in LevelManager.level.blobs.values():
+		if is_instance_valid(blob):
+			list.append(blob)
 	return list
 
 # 取 time 最小者；时间相同则 act_priority **大**者先。

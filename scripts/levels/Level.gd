@@ -24,11 +24,17 @@ var rooms = []             # Room 对象列表（仅生成期使用）
 # 换层时据此定目标深度与落点。
 var transitions: Array = []        # LevelTransition 列表
 var monster_cells: Array = []      # 生成期怪格（种子）
-var item_placements: Array = []    # 生成期物品清单（[{cell: Vector2i, item: Item}]）
 
-# 运行期实体快照（离开本层时场景采集，原 floor_cache 字典的 "monsters"/"items"）
+# 地面物品：一格一个 Heap（原版 Level.heaps）。生成期直接建 Heap，运行期就地增删，
+# 离层快照也用它——三态合一，不再有"生成清单 / 快照 / 节点数组"三套平行表示。
+var heaps: Array = []              # Heap 列表（Heap 自带 pos）
+
+# 运行期实体快照（离开本层时场景采集，原 floor_cache 字典的 "monsters"/"heaps"）
 var monsters: Array = []           # 快照：mob.serialize() 字典
-var items: Array = []              # 快照：[{cell: Vector2i, item: Item}]
+
+# 层上的 blob（火焰/毒气/水一类的场地效应），按 blob 类做键——原版 Level.blobs。
+# Blob.seed/volumeAt 只认这一处存储；换层时随 Level 一起进 floor_cache。
+var blobs: Dictionary = {}
 
 
 # ---------- 出入口取用（对齐 SPD Level.getTransition 系列） ----------
@@ -62,3 +68,26 @@ func entrance() -> Vector2i:
 func exit() -> Vector2i:
 	var t = get_transition(LevelTransition.Type.REGULAR_EXIT)
 	return t.cell if t != null else Vector2i(0, 0)
+
+
+# ---------- 地面物品堆取用 ----------
+# 访问器与 get_transition_at 同风格：Array + 扫描（一层上的堆很少，不值得另建索引）。
+
+func heap_at(cell: Vector2i) -> Heap:
+	for h: Heap in heaps:
+		if h.pos == cell:
+			return h
+	return null
+
+# 往某格放一件：该格已有堆就并进去，没有就新建一个。返回落定的那个堆。
+func drop_item(item: Item, cell: Vector2i) -> Heap:
+	var h := heap_at(cell)
+	if h == null:
+		h = Heap.new()
+		h.pos = cell
+		heaps.append(h)
+	h.drop(item)
+	return h
+
+func remove_heap(h: Heap) -> void:
+	heaps.erase(h)

@@ -56,7 +56,7 @@ signal _item_selection_resolved(item: Item)
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 10.0
 
-var items_on_floor: Array = []   # 地面物品节点（引用）
+var heap_nodes: Array = []   # 地面物品堆节点（HeapNode 引用，一格一个）
 
 # 层序：地面瓦片=0 → 地面物品/飞行物品=0(树序靠后，压瓦片) → 角色=1 → 地格选取框=2。
 # 故物品（含投掷飞行体）始终渲染在角色下方、瓦片上方；选取框再压在所有实体之上。
@@ -146,7 +146,7 @@ func _process(delta):
 	for i in range(1, 5):
 		text +=str(hero.talent_points_available(i)) + " "
 	text += "\n"
-	text += "精准: " + str(hero.attack_skill) + " 闪避：" + str(hero.defense_skill) + "\n\n"
+	text += "精准: " + str(hero.get_attack_skill(null)) + " 闪避：" + str(hero.get_defense_skill(null)) + "\n\n"
 	text += "当前楼层: " + str(GameState.depth) + "\n"
 	$CanvasLayer/StatusLabel.text = text
 
@@ -283,13 +283,13 @@ func update_monsters_visibility():
 			mob.sprite.visible = false
 				
 func update_items_visibility():
-	for item_node in items_on_floor:
-		if is_instance_valid(item_node):
-			var cell = item_node.grid_pos
+	for node in heap_nodes:
+		if is_instance_valid(node):
+			var cell = node.grid_pos
 			if cell.x >= 0 and cell.x < LevelManager.MAP_WIDTH and cell.y >= 0 and cell.y < LevelManager.MAP_HEIGHT:
-				item_node.visible = hero.FOV[cell.y][cell.x]
+				node.visible = hero.FOV[cell.y][cell.x]
 			else:
-				item_node.visible = false
+				node.visible = false
 				
 # ---------- 放置英雄：只建表现节点并摆位；数据初始化已由 GameState 在进场景前完成 ----------
 # 落点（grid_pos）由 GameState.new_game / load_game 决定，本场景不再决定英雄站哪。
@@ -372,10 +372,10 @@ func clear_map():
 	walls_layer.clear()
 	water_layer.clear()
 	fog_layer.clear()
-	for item_node in items_on_floor:
-		if is_instance_valid(item_node):
-			item_node.queue_free()
-	items_on_floor.clear()
+	for node in heap_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
+	heap_nodes.clear()
 	for mob in TurnManager.monsters.duplicate():
 		if is_instance_valid(mob.sprite):
 			mob.sprite.queue_free()
@@ -479,7 +479,7 @@ func activate_transition(transition: LevelTransition) -> void:
 		return
 	rebuild_level(result["landing"])
 
-# ---------- 采集当前层活实体 → 快照（怪的位置与血量、地面物品） ----------
+# ---------- 采集当前层活实体 → 快照（怪的位置与血量、地面物品堆） ----------
 func capture_entities() -> Dictionary:
 	# 怪直接交整份 mob.serialize()（含种类 / 血量 / 位置 / AI 状态 / buff），
 	# 不再只记 {位置, 血量} —— 那样重建时只能硬编回 Rat，且状态全丢。
@@ -487,11 +487,8 @@ func capture_entities() -> Dictionary:
 	for mob in TurnManager.monsters:
 		if is_instance_valid(mob):
 			monsters.append(mob.serialize())
-	var items := []
-	for node in items_on_floor:
-		if is_instance_valid(node):
-			items.append({ "cell": node.grid_pos, "item": node.item_data })
-	return { "monsters": monsters, "items": items }
+	# 地面堆本就是数据（LevelManager.level.heaps），直接交，不必从节点反采集。
+	return { "monsters": monsters, "heaps": LevelManager.level.heaps }
 
 # 换层后重建视图：清旧实体、重绘地图层、摆好英雄、渲染怪/物。
 # 由 activate_transition 在 LevelManager 完成数据侧后调用（唯一调用方是 Hero.act_transition，
@@ -499,10 +496,10 @@ func capture_entities() -> Dictionary:
 # 渲染怪/物各自会先查本层快照（读档或回访）→ 命中则按快照重建，未命中才走新生成。
 func rebuild_level(landing: Vector2i) -> void:
 	# 清掉旧层实体
-	for item_node in items_on_floor:
-		if is_instance_valid(item_node):
-			item_node.queue_free()
-	items_on_floor.clear()
+	for node in heap_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
+	heap_nodes.clear()
 	for mob in TurnManager.monsters.duplicate():
 		if is_instance_valid(mob.sprite):
 			mob.sprite.queue_free()
@@ -545,14 +542,6 @@ func _render_monsters_from(snapshot: Array) -> void:
 			continue   # 脚本路径失效（怪种被删/改名）：跳过，不让一只读不回来的怪拖崩整层
 		_spawn_monster(data, data.grid_pos)
 
-func _render_items_from(snapshot: Array) -> void:
-	for e in snapshot:
-		# 快照里的物品可能为空（存档时脚本路径失效、Item.from_data 返回 null 的那类）：
-		# 空项一律跳过，不能喂给 create_floor_item——它会在合并循环里对 null 取 .name() 崩掉。
-		if e.get("item", null) == null:
-			continue
-		create_floor_item(e["item"], e["cell"])
-
 # ---------- 鼠标坐标 ----------
 func get_cell_from_mouse_pos() -> Vector2i:
 	var mouse_pos = get_global_mouse_position()
@@ -563,34 +552,35 @@ func get_cell_from_mouse_pos() -> Vector2i:
 	return Vector2i(-1, -1)
 
 # ---------- 物品系统 ----------
-# 渲染地面物品：按 LevelManager.level.item_placements 实例化 Item 节点（含同格合并逻辑沿用 create_floor_item）
+# 渲染地面物品堆：一格一个 HeapNode（数据是 LevelManager.level.heaps）。
+# 生成期就绪的层与读档/回访的层都直接落在 level.heaps 上（后者由 deserialize_floor 复原），
+# 故这里一律读 level.heaps，不必再分"快照 / 新生成"两条路。
 func render_items():
-	# 有本层快照（读档或回访）→ 按快照重建；物品内容仍缺序列化，空项由 _render_items_from 跳过。
-	var ents = LevelManager.get_floor_entities(LevelManager.current_depth)
-	if not ents.is_empty():
-		_render_items_from(ents.get("items", []))
-		return
-	for placement in LevelManager.level.item_placements:
-		create_floor_item(placement["item"], placement["cell"])
+	for heap: Heap in LevelManager.level.heaps:
+		_render_heap(heap)
 
-func create_floor_item(item_data: Item, cell: Vector2i):
-	for item_node in items_on_floor:
-		if item_node.grid_pos == cell and item_node.item_data.name() == item_data.name():
-			item_node.item_data.item_quantity += item_data.item_quantity
-			return
-	var item_node = preload("res://tscns/Item.tscn").instantiate()
-	item_node.grid_pos = cell
-	item_node.position = terrain_layer.map_to_local(cell)
-	item_node.item_data = item_data
-	item_node.z_index = ITEM_Z   # 在角色之下、地面瓦片之上
-	add_child(item_node)
-	items_on_floor.append(item_node)
+# 一条堆 = 一份数据（Heap）+ 一个表现节点（Heap.tscn）。节点挂在 heap.sprite 上
+# （照 Actor.sprite 的写法），场景侧另存一份引用数组备遍历。
+func _render_heap(heap: Heap) -> void:
+	var node = preload("res://tscns/Heap.tscn").instantiate()
+	node.heap = heap
+	node.grid_pos = heap.pos
+	node.position = terrain_layer.map_to_local(heap.pos)
+	node.z_index = ITEM_Z   # 在角色之下、地面瓦片之上
+	heap.sprite = node
+	add_child(node)
+	heap_nodes.append(node)
+
+# 拆掉某堆的视图节点（堆已空 / 被移除）。
+func _clear_heap_node(heap: Heap) -> void:
+	var node = heap.sprite
+	heap.sprite = null
+	if node != null and is_instance_valid(node):
+		heap_nodes.erase(node)
+		node.queue_free()
 
 func is_item_on_cell(cell: Vector2i) -> bool:
-	for item_node in items_on_floor:
-		if item_node.grid_pos == cell:
-			return true
-	return false
+	return LevelManager.level.heap_at(cell) != null
 
 # 走开某格时把该格上开着的门带上。门格里放着东西就永远敞着——关不上。
 func close_door_behind(cell: Vector2i) -> void:
@@ -598,16 +588,22 @@ func close_door_behind(cell: Vector2i) -> void:
 		return
 	MapManager.close_door(cell)
 
+# 拾取：站到某格上的堆 → 取堆顶那件交给它自己 do_pickup（进包 + 记时）。
+# 成功则从堆里摘除：还有剩就留在原地（节点仍指向同一个堆，堆顶自动变了），
+# 空了就拆掉堆与节点。失败（包满）原样留在堆里。
 func try_collect(actor: Char) -> bool:
-	for i in range(items_on_floor.size() - 1, -1, -1):
-		var item_node = items_on_floor[i]
-		if item_node.grid_pos == actor.grid_pos:
-			if item_node.do_pickup(actor):
-				items_on_floor.remove_at(i)
-				item_node.queue_free()
-				return true
-	print("此处没有物品或背包已满")
-	return false
+	var heap = LevelManager.level.heap_at(actor.grid_pos)
+	if heap == null:
+		print("此处没有物品")
+		return false
+	if not heap.peek().do_pickup(actor):
+		print("背包已满")
+		return false
+	heap.pick_up()
+	if heap.is_empty():
+		LevelManager.level.remove_heap(heap)
+		_clear_heap_node(heap)
+	return true
 
 # ---------- 通用选格 ----------
 # 进入选取模式，等玩家左键确认或右键/Esc 取消，返回选中格；取消返回 (-1,-1)。
@@ -679,7 +675,11 @@ func drop(item: Item, cell: Vector2i) -> bool:
 		return false
 	is_animating = true   # 飞行期间挡输入，避免半途再次行动
 	await _animate_throw(item, cell)
-	create_floor_item(item, cell)
+	var heap = LevelManager.level.drop_item(item, cell)
+	# 落点原本没有堆 → 建一个视图节点。已有堆的话节点还在（且指向同一个堆对象，堆顶已自动变），
+	# 当前是占位贴图无需重画。
+	if heap.sprite == null or not is_instance_valid(heap.sprite):
+		_render_heap(heap)
 	# 物品落在门上 → 门开。否则会剩下"关着的门 + 门格上有物品"，与"门格有物品就始终开着"冲突。
 	# 不是门、或门本来就开着都是 no-op；上锁门不在此列（open_door 只认 DOOR）。
 	MapManager.open_door(cell)
@@ -695,8 +695,12 @@ func _animate_throw(item_data: Item, landing: Vector2i) -> void:
 	var cells = max(abs(landing.x - hero.grid_pos.x), abs(landing.y - hero.grid_pos.y))
 	if cells <= 0:
 		return   # 原地落下，无需飞行
-	var fly = preload("res://tscns/Item.tscn").instantiate()
-	fly.item_data = item_data
+	# 飞行体复用 Heap.tscn（HeapNode）：临时造一个只装这一件的堆给它画。
+	var temp := Heap.new()
+	temp.pos = landing
+	temp.drop(item_data)
+	var fly = preload("res://tscns/Heap.tscn").instantiate()
+	fly.heap = temp
 	fly.grid_pos = landing
 	fly.position = cell_to_world(hero.grid_pos)
 	fly.z_index = ITEM_Z   # 飞行体同样在角色之下、地面瓦片之上

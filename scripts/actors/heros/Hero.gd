@@ -606,7 +606,9 @@ func bonus_talent_points(tier: int) -> int:
 	return 0
 
 func get_attack_skill(target: Char) -> int:
-	return attack_skill
+	var accuracy = 1
+	accuracy *= RingOfAccuracy.accuracy_multiplier(self)
+	return max(1, roundi(attack_skill * accuracy))
 
 func get_defense_skill(target: Char) -> int:
 	var evasion = defense_skill

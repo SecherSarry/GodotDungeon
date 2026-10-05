@@ -1,7 +1,7 @@
 extends Node2D
 
 # 角色表现层：Hero.tscn / Mob.tscn 的根脚本。
-# 与 Item 那条线同构：Item(Resource) + ItemNode(Node2D) ↔ Actor(Resource) + ActorNode(Node2D)。
+# 与物品那条线同构：Heap(Resource) + HeapNode(Node2D) ↔ Actor(Resource) + ActorNode(Node2D)。
 # 数据（hp / time / grid_pos）在 actor_data 那份 Resource 上，本节点只管画面——
 # 精灵、朝向、自滑插值、血条、一次性动画的播放与收尾。
 #

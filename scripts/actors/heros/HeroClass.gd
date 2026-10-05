@@ -46,6 +46,7 @@ func init_hero(hero:Hero) -> void:
 	#PlateArmor.new().identify().collect()
 	
 	ChaliceOfBlood.new().identify().collect()
+	RingOfAccuracy.new().random().collect()
 
 # ---------- 三职业 ----------
 # 原版各自的初始化在 HeroClass 的私有静态方法 initWarrior/initMage/initRogue 里；
@@ -60,6 +61,8 @@ class Warrior extends HeroClass:
 		hero.weapon = WornShortsword.new(2).identify()
 		hero.armor = ClothArmor.new(1).identify()
 		# 原版 initWarrior：WornShortsword 入武器槽并鉴定、ThrowingStone、
+		hero.ring = RingOfAccuracy.new()
+		hero.ring.activate(hero)
 		# 护甲镶 BrokenSeal、PotionOfHealing、ScrollOfRage。
 		pass
 

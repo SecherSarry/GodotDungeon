@@ -53,12 +53,14 @@ func refresh():
 		return
 	item_list.clear()
 	for item in game_scene.hero.backpack.items:
-		item_list.add_item(_label(item))
+		var idx: int = item_list.add_item(_label(item))
+		item_list.set_item_custom_fg_color(idx, _color(item))
 
 	belongings_list.clear()
 	var slots: Array = game_scene.hero.belongings.slots()
 	for i in slots.size():
-		belongings_list.add_item(_label(slots[i], i))
+		var idx: int = belongings_list.add_item(_label(slots[i], i))
+		belongings_list.set_item_custom_fg_color(idx, _color(slots[i]))
 
 	_reset_selection()
 
@@ -68,6 +70,12 @@ func _label(item: Item, slot: int = -1) -> String:
 	var text = item.title()
 	return text
 
+func _color(item: Item) -> Color:
+	if item != null:
+		if item.cursed and item.cursed_known:
+			return Color.RED
+	return Color.GRAY
+	
 # ---------- 选中：两列表互斥 ----------
 func _deselect_all(list: ItemList):
 	for i in list.item_count:

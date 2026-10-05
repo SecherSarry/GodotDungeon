@@ -1,9 +1,9 @@
-[gd_scene format=3 uid="uid://5rqmgtbn0qgy"]
+[gd_scene format=3 uid="uid://ct247nhys0dlg"]
 
-[ext_resource type="Script" path="res://scripts/items/ItemNode.gd" id="1_iie44"]
+[ext_resource type="Script" path="res://scripts/items/HeapNode.gd" id="1_iie44"]
 [ext_resource type="Texture2D" uid="uid://bq51pyq6xthu6" path="res://assets/FOV.png" id="2_2yg4x"]
 
-[node name="Item" type="Node2D" unique_id=1735311478]
+[node name="Heap" type="Node2D" unique_id=1735311478]
 script = ExtResource("1_iie44")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1866162992]

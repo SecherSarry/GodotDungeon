@@ -74,15 +74,22 @@ static var identified_scrolls = ["升级卷轴", "鉴定卷轴", "驱邪卷轴",
 static var anonymous_scrolls = ["KAUNAN卷轴", "SOWILO卷轴", "LAGUZ卷轴", "YNGVI卷轴", "GYFU卷轴", "RAIDO卷轴", "ISAZ卷轴", "MANNAZ卷轴", "NAUDIZ卷轴", "BERKANAN卷轴", "ODAL卷轴", "TIWAZ卷轴"]
 static var identified_potions = []
 static var anonymous_potions = []
+static var identified_rings = ["精准之戒"]
+static var anonymous_rings = ["石榴石戒指"]
 static func init_anonymous_names():
 	# 重洗假名必须同时清空已知集合，否则上一局的鉴定进度会漏进新局（同 SPD clearLabels+initLabels）。
 	known.clear()
 	anonymous_scrolls.shuffle()
 	for i in range(0, identified_scrolls.size()):
 		anonymous_names[identified_scrolls[i]] = anonymous_scrolls[i]
+		
 	anonymous_potions.shuffle()
 	for i in range(0, identified_potions.size()):
 		anonymous_names[identified_potions[i]] = anonymous_potions[i]
+		
+	anonymous_rings.shuffle()
+	for i in range(0, identified_rings.size()):
+		anonymous_names[identified_rings[i]] = anonymous_rings[i]
 
 func serialize() -> Dictionary:
 	var data = {

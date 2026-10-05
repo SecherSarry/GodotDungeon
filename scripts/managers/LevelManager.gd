@@ -54,7 +54,7 @@ func generate_level(depth: int = -1, feeling: String = "NORMAL") -> void:
 		lv.monster_cells.append(m["pos"])
 
 	for it in result["items"]:
-		lv.item_placements.append({ "cell": it["pos"], "item": _make_item(it["type"]) })
+		lv.drop_item(_make_item(it["type"]), it["pos"])
 
 	lv.explored = _blank_explored()
 	level = lv
@@ -67,7 +67,7 @@ func generate_level(depth: int = -1, feeling: String = "NORMAL") -> void:
 ## 当前层的 Level 直接进缓存：调用方随即离开该层，指针交给缓存后不再改动。
 func save_floor(depth: int, entities: Dictionary) -> void:
 	level.monsters = entities.get("monsters", [])
-	level.items = entities.get("items", [])
+	level.heaps = entities.get("heaps", [])
 	floor_cache[depth] = level
 
 
@@ -85,16 +85,17 @@ func enter_floor(depth: int) -> bool:
 func get_floor_entities(depth: int) -> Dictionary:
 	if floor_cache.has(depth):
 		var lv: Level = floor_cache[depth]
-		return { "monsters": lv.monsters, "items": lv.items }
+		return { "monsters": lv.monsters, "heaps": lv.heaps }
 	return {}
 
 
 # ---------- 磁盘边界：floor_cache ↔ JSON ----------
-# floor_cache 里，物品保持原形（格 = Vector2i，物品 = Item 实例），落盘/读盘时才转换；
-# 怪则直接存 mob.serialize() 的字典（本就是 JSON 安全的），落盘原样透传、读回原样透传，
-# 于是内存形与磁盘形对怪是同一份——场景 _render_monsters_from 直接拿它喂 Mob.from_data。
+# floor_cache 里，地面物品保持原形（一格一个 Heap：pos = Vector2i，items = Item 实例），
+# 落盘/读盘时才转换；怪则直接存 mob.serialize() 的字典（本就是 JSON 安全的），
+# 落盘原样透传、读回原样透传，于是内存形与磁盘形对怪是同一份——场景 _render_monsters_from
+# 直接拿它喂 Mob.from_data。
 
-# Vector2i 进不了 JSON，一律拆成 [x, y]。楼层与物品快照共用这一对，别在各调用点各写一遍。
+# Vector2i 进不了 JSON，一律拆成 [x, y]。楼层与物品堆共用这一对，别在各调用点各写一遍。
 func cell_to_arr(cell: Vector2i) -> Array:
 	return [cell.x, cell.y]
 
@@ -107,10 +108,9 @@ func serialize_floor(depth: int) -> Dictionary:
 	if not floor_cache.has(depth):
 		return {}
 	var lv: Level = floor_cache[depth]
-	var items := []
-	for e in lv.items:
-		var it = e.get("item", null)
-		items.append({ "cell": cell_to_arr(e["cell"]), "item": it.serialize() if it != null else null })
+	var heaps := []
+	for h: Heap in lv.heaps:
+		heaps.append(h.serialize())
 	var transitions := []
 	for t in lv.transitions:
 		transitions.append(_transition_to_data(t))
@@ -119,7 +119,7 @@ func serialize_floor(depth: int) -> Dictionary:
 		"transitions": transitions,
 		"explored": lv.explored,
 		"monsters": lv.monsters,   # 已是 mob.serialize() 的 JSON 安全字典，原样透传
-		"items": items,
+		"heaps": heaps,
 	}
 
 
@@ -147,12 +147,11 @@ func _transition_from_data(d: Dictionary) -> LevelTransition:
 ## 逐处 int() 归一：JSON 数字读回来一律是 float，而地形要喂 Terrain.has_flag 的位运算——
 ## 留着 float 会静默算错。怪不必在这里转换（Mob.from_data 在场景侧重建时自己归一）。
 func deserialize_floor(depth: int, data: Dictionary) -> void:
-	var items := []
-	for e in data.get("items", []):
-		items.append({
-			"cell": arr_to_cell(e.get("cell", [0, 0])),
-			"item": Item.from_data(e.get("item")) if e.get("item") != null else null,
-		})
+	var heaps := []
+	for hd in data.get("heaps", []):
+		var h: Heap = Heap.from_data(hd)
+		if h != null and not h.is_empty():
+			heaps.append(h)
 	var transitions := []
 	for td in data.get("transitions", []):
 		transitions.append(_transition_from_data(td))
@@ -161,7 +160,7 @@ func deserialize_floor(depth: int, data: Dictionary) -> void:
 	lv.transitions = transitions
 	lv.explored = data.get("explored", [])
 	lv.monsters = data.get("monsters", [])   # 已是 JSON 安全字典，原样透传
-	lv.items = items
+	lv.heaps = heaps
 	floor_cache[depth] = lv
 
 
