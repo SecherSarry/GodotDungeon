@@ -1,10 +1,8 @@
 [gd_scene format=3 uid="uid://5rqmgtbn0qgy"]
 
-[ext_resource type="Script" path="res://scripts/items/ItemNode.gd" id="1_iie44"]
-[ext_resource type="Texture2D" uid="uid://bq51pyq6xthu6" path="res://assets/FOV.png" id="2_2yg4x"]
+[ext_resource type="Texture2D" uid="uid://8nrivwib17hp" path="res://assets/items.tres" id="1_vris4"]
 
 [node name="Item" type="Node2D" unique_id=1735311478]
-script = ExtResource("1_iie44")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1866162992]
-texture = ExtResource("2_2yg4x")
+texture = ExtResource("1_vris4")

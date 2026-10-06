@@ -1,12 +1,20 @@
-extends Node
+extends RefCounted
 class_name Belongings
 
 # SPD Belongings：一局的随身物容器——一个背包 + 六个装备槽（武器/护甲/神器/杂物/戒指/第二武器）。
 # SPD 里它由 Hero 构造持有（Belongings(Hero owner)），本工程 Hero 是 Resource，同样在 Hero._init 里 new 一份。
 # hero.belongings 即本对象；hero.belongings.backpack 才是背包（SPD 同此）。
+#
+# extends RefCounted 而非 Node：本类从不 add_child，是纯数据容器。Node 不是引用计数对象，
+# new 了不入场景树就是永久泄漏（每次建英雄 / 读档漏一份）——HeroAction / Talent / HeroClass
+# 都已按此改过来，本类此前漏改（HeroAction.gd:9-10 的注释正是解释这个坑）。
 
-# SPD Belongings 持 owner 供 activate/uncursing 用；本工程暂未用到，且 Hero↔Belongings 互相强引用会成环泄漏，
-# 故先留字段不赋值（预留接口，真要用时再以 weakref 接）。
+# SPD Belongings 持 owner 供 activate/uncursing 用；本工程暂未用到。
+# **必须保持不赋值**：本类是 RefCounted、Hero 是 Resource，都是有引用计数的对象，
+# 一旦赋值就是 Hero→belongings→Hero 的强引用环，两者永不回收（改成 RefCounted 之后
+# 这条约束比原先更硬——之前是 Node 泄漏，现在是直接的引用环）。
+# 真要用 owner 时以 `weakref(hero)` 存 WeakRef，取用处 .get_ref()，别直接存 Hero。
+# 全树无 b_owner 的读取点（仅本行声明），不赋值即安全。
 var b_owner: Hero
 
 class Backpack extends Bag:

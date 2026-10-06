@@ -25,6 +25,7 @@ AudioManager="*uid://ct7phtnucdfgi"
 GameState="*uid://cuetac6mpcrvv"
 SaveManager="*uid://b27ybntproi45"
 LevelManager="*uid://bdrkd4vpqm5hd"
+SeedManager="*uid://cnjc7wlutoc5m"
 
 [display]
 

@@ -1,0 +1,3 @@
+# 导出产物目录：只放 .exe/.pck/.apk/.zip 等构建结果，不入库。
+# 导出目标由 export_presets.cfg 决定（Android + Windows Desktop 都往这里写）。
+Release/

@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3 uid="uid://ca22qwl0yrh2j"]
+[gd_scene format=3 uid="uid://ca22qwl0yrh2j"]
 
 [ext_resource type="Script" uid="uid://1ajm4qy7aeiv" path="res://scripts/actors/ActorNode.gd" id="1_0i4ec"]
 

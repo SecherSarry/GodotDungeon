@@ -3,6 +3,7 @@ class_name ChaliceOfBlood
 
 func _init(lvl: int = 0) -> void:
 	super()
+	image = ItemSpriteSheet.ARTIFACT_CHALICE1
 	level_cap = 10
 	item_name = "蓄血圣杯"
 
@@ -40,7 +41,7 @@ func prick(hero: Hero):
 	else:
 		pass
 		
-	hero.damage(damage, self);
+	#hero.damage(damage, self);
 	
 	if not hero.is_alive():
 		print("死了")
@@ -49,13 +50,17 @@ func prick(hero: Hero):
 
 func upgrade() -> Item:
 	if level() >= 6:
-		pass
+		image = ItemSpriteSheet.ARTIFACT_CHALICE3
 	elif level() >= 2:
-		pass
+		image = ItemSpriteSheet.ARTIFACT_CHALICE2
 	return super.upgrade()
 
 func deserialize(data: Dictionary) -> void:
 	super.deserialize(data)
+	if level() >= 7:
+		image = ItemSpriteSheet.ARTIFACT_CHALICE3
+	elif level() >= 3:
+		image = ItemSpriteSheet.ARTIFACT_CHALICE2
 
 func get_passive_buff() -> ArtifactBuff:
 	return ChaliceRegen.new()

@@ -12,7 +12,8 @@ static var TIME_TO_DROP: float = 1.0
 var default_action: String
 var uses_targeting: bool
 
-var icon: Texture2D = null
+var image: AtlasTexture = null
+var icon: AtlasTexture = null
 
 var stackable: bool = false
 var item_quantity: int = 1

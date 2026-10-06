@@ -34,7 +34,7 @@ static func build(room_a: Room, room_b: Room) -> RoomConnection:
 # 不能用 range(min, max)：那样永远从小走到大，from 在 to 右侧/下侧时首格就成了 to 那边。
 static func l_path(from: Vector2i, to: Vector2i) -> Array:
 	var path := []
-	if randi() % 2 == 0:
+	if Random.randi() % 2 == 0:
 		# 先横后竖
 		for x in _steps(from.x, to.x):
 			path.append(Vector2i(x, from.y))

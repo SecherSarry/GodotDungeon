@@ -1,9 +1,0 @@
-res://tscns/Item.tscn
-res://addons/TileMapDual/tile_map_dual.gd
-res://assets/rat_frames.tres
-res://scripts/items/Item.gd
-res://scripts/items/rings/Ring.gd
-res://scripts/actors/ActorNode.gd
-res://scripts/levels/Level.gd
-res://scripts/managers/LevelManager.gd
-res://scripts/scenes/GameScene/GameScene.gd

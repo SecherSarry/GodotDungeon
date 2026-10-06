@@ -146,7 +146,10 @@ func get_str():
 	return str + str_bouns
 
 func live():
-	for b: Buff in buffs:
+	# 必须走 all_buffs()：Char.buffs 是 Dictionary，直接 `for b in buffs` 拿到的是**键**
+	# （脚本类型对象），b.revive_persists 会当场报错。此前靠"live() 时 buff 字典尚空"侥幸不触发，
+	# 代价是 revive_persists 这条机制从未生效（全树无人置真，真置了也读不到）。
+	for b: Buff in all_buffs():
 		if(!b.revive_persists): b.detach()
 	Buff.affect(self, Regeneration)
 	Buff.affect(self, Hunger)

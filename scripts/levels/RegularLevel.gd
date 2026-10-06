@@ -37,8 +37,10 @@ const MARGIN := Room.MARGIN
 
 # ---------- 生成主函数 ----------
 static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
+	# 本层种子压栈：此后本函数、以及 Room / RoomConnection 里的 Random.* 都从这条流取，
+	# 同一种子 → 同一张图。深度用参数而非 GameState.depth——enter_floor 会在把 current_depth
+	# 写回之前就调到这里，那会儿 GameState.depth 还没更新。两个 return 前都要 pop 还原栈。
+	Random.push_generator(SeedManager.seed_for_depth(GameState.seed, depth, GameState.branch))
 
 	# 1. 初始化地图（全墙壁）
 	var map_data = []
@@ -49,12 +51,13 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 		map_data.append(row)
 
 	# 2. 撒房间（不重叠、不贴合）
-	var rooms = place_rooms(depth, rng)
+	var rooms = place_rooms(depth)
 	if rooms.is_empty():
+		Random.pop_generator()
 		return generate_fallback(depth)
 
 	# 3. 连通房间（近邻 MST 保连通），再给每间补到至少两道门
-	var connections = connect_rooms(rooms, rng)
+	var connections = connect_rooms(rooms)
 	ensure_two_doors(rooms, connections)
 
 	# 4. 落地板：房间自画矩形，连接处补走廊与门
@@ -66,7 +69,7 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 	painter.paint(map_data)
 
 	# 6. 放置陷阱
-	var traps = place_traps(map_data, depth, rng)
+	var traps = place_traps(map_data, depth)
 
 	# 7. 出入口：入口取首间房，出口取离它最远的那间——出入口必须拉开距离，不能开在隔壁。
 	# 先占位再放怪放物，免得怪/物落在出入口上。
@@ -81,10 +84,10 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 	occupied[exit_pos] = true
 
 	# 8. 放置怪物
-	var mobs = place_mobs(map_data, rooms, entrance_room, depth, rng, occupied)
+	var mobs = place_mobs(map_data, rooms, entrance_room, depth, occupied)
 
 	# 9. 放置物品
-	var items = place_items(map_data, rooms, entrance_room, depth, rng, occupied)
+	var items = place_items(map_data, rooms, entrance_room, depth, occupied)
 
 	# 出入口盖回各自的专属地形（前面可能被草/水/陷阱盖过）。ENTRANCE/EXIT 与 EMPTY 同为可走。
 	map_data[entrance_pos.y][entrance_pos.x] = ENTRANCE
@@ -96,6 +99,7 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 		LevelTransition.make(LevelTransition.Type.REGULAR_EXIT, exit_pos, depth),
 	]
 
+	Random.pop_generator()
 	return {
 		"map_data": map_data,
 		"rooms": rooms,
@@ -107,7 +111,7 @@ static func generate(depth: int = 1, feeling: String = "NORMAL") -> Dictionary:
 
 # ---------- 撒房间 ----------
 # 反复随机尺寸与位置，重叠（含 MARGIN 间隔）就丢弃。尺寸区间由 StandardRoom 按档位决定并已按地图夹紧。
-static func place_rooms(depth: int, rng: RandomNumberGenerator) -> Array:
+static func place_rooms(depth: int) -> Array:
 	var rooms := []
 	var max_rooms = 6 + depth % 3  # 随深度增加
 	var attempts = 0
@@ -122,7 +126,7 @@ static func place_rooms(depth: int, rng: RandomNumberGenerator) -> Array:
 		var max_y = MAP_HEIGHT - room.height() - MARGIN
 		if max_x < MARGIN or max_y < MARGIN:
 			continue
-		room.set_pos(rng.randi_range(MARGIN, max_x), rng.randi_range(MARGIN, max_y))
+		room.set_pos(Random.randi_range(MARGIN, max_x), Random.randi_range(MARGIN, max_y))
 
 		var overlaps = false
 		for other in rooms:
@@ -144,7 +148,7 @@ static func place_rooms(depth: int, rng: RandomNumberGenerator) -> Array:
 # 从 0 号房出发，每次把"离已连通集合最近"的未连通房间接上（Prim 式），保证全图连通；
 # 每接一条产出一个 RoomConnection（含 L 形走廊格与两端门格），走廊与门的绘制交给 paint_connections。
 # 这里只管连通，不管连接数够不够——那是 ensure_two_doors 的事。
-static func connect_rooms(rooms: Array, rng: RandomNumberGenerator) -> Array:
+static func connect_rooms(rooms: Array) -> Array:
 	var connections := []
 	if rooms.size() < 2:
 		return connections
@@ -298,22 +302,22 @@ class Painter:
 		for y in range(MAP_HEIGHT):
 			for x in range(MAP_WIDTH):
 				if map_data[y][x] == EMPTY:
-					if randf() < grass_chance:
+					if Random.randf() < grass_chance:
 						map_data[y][x] = GRASS
-					elif randf() < water_chance:
+					elif Random.randf() < water_chance:
 						map_data[y][x] = WATER
 
 # ---------- 陷阱放置 ----------
-static func place_traps(map_data: Array, depth: int, rng: RandomNumberGenerator) -> Array:
+static func place_traps(map_data: Array, depth: int) -> Array:
 	var traps = []
 	# 简单放置 2~4 个陷阱在空地上
-	var count = randi_range(2, 4 + depth / 3)
+	var count = Random.randi_range(2, 4 + depth / 3)
 	for i in range(count):
 		var attempts = 0
 		while attempts < 100:
-			var x = randi_range(1, MAP_WIDTH - 2)
-			var y = randi_range(1, MAP_HEIGHT - 2)
-			if map_data[y][x] == EMPTY and rng.randf() < 0.5:  # 避免所有空地都放陷阱
+			var x = Random.randi_range(1, MAP_WIDTH - 2)
+			var y = Random.randi_range(1, MAP_HEIGHT - 2)
+			if map_data[y][x] == EMPTY and Random.randf() < 0.5:  # 避免所有空地都放陷阱
 				map_data[y][x] = Terrain.TRAP
 				traps.append(Vector2i(x, y))
 				break
@@ -321,14 +325,14 @@ static func place_traps(map_data: Array, depth: int, rng: RandomNumberGenerator)
 	return traps
 
 # ---------- 怪物放置 ----------
-static func place_mobs(map_data: Array, rooms: Array, entrance_room: Room, depth: int, rng: RandomNumberGenerator, occupied: Dictionary) -> Array:
+static func place_mobs(map_data: Array, rooms: Array, entrance_room: Room, depth: int, occupied: Dictionary) -> Array:
 	var mobs = []
-	var count = 3 + depth % 3 + randi_range(0, 2)
+	var count = 3 + depth % 3 + Random.randi_range(0, 2)
 	var placed = 0
 	var attempts = 0
 	while placed < count and attempts < 200:
 		attempts += 1
-		var room = rooms[randi() % rooms.size()]
+		var room = rooms[Random.randi() % rooms.size()]
 		if room == entrance_room:
 			continue  # 不在入口房生成
 		var cell = room.random_point()
@@ -341,14 +345,14 @@ static func place_mobs(map_data: Array, rooms: Array, entrance_room: Room, depth
 	return mobs
 
 # ---------- 物品放置 ----------
-static func place_items(map_data: Array, rooms: Array, entrance_room: Room, depth: int, rng: RandomNumberGenerator, occupied: Dictionary) -> Array:
+static func place_items(map_data: Array, rooms: Array, entrance_room: Room, depth: int, occupied: Dictionary) -> Array:
 	var items = []
-	var count = 2 + randi_range(0, 3)
+	var count = 2 + Random.randi_range(0, 3)
 	var placed = 0
 	var attempts = 0
 	while placed < count and attempts < 150:
 		attempts += 1
-		var room = rooms[randi() % rooms.size()]
+		var room = rooms[Random.randi() % rooms.size()]
 		if room == entrance_room:
 			continue
 		var cell = room.random_point()
@@ -356,7 +360,7 @@ static func place_items(map_data: Array, rooms: Array, entrance_room: Room, dept
 			continue  # 该格已被出入口、怪或物品占住
 		if map_data[cell.y][cell.x] == EMPTY:
 			occupied[cell] = true
-			var rad = rng.randf()
+			var rad = Random.randf()
 			var item_type
 			if rad < 0.3:
 				item_type = "potion"

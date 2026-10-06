@@ -59,7 +59,7 @@ func cells() -> Array:
 func random_point() -> Vector2i:
 	if width() <= 2 or height() <= 2:
 		return center()
-	return Vector2i(randi_range(left + 1, right - 1), randi_range(top + 1, bottom - 1))
+	return Vector2i(Random.randi_range(left + 1, right - 1), Random.randi_range(top + 1, bottom - 1))
 
 
 # ---------- 关系 ----------
@@ -129,7 +129,7 @@ func set_size(min_w: int = -1, max_w: int = -1, min_h: int = -1, max_h: int = -1
 		max_h = max_height()
 	if min_w < 1 or max_w < min_w or min_h < 1 or max_h < min_h:
 		return false
-	return set_size_exact(randi_range(min_w, max_w), randi_range(min_h, max_h))
+	return set_size_exact(Random.randi_range(min_w, max_w), Random.randi_range(min_h, max_h))
 
 func set_size_exact(w: int, h: int) -> bool:
 	if w < 1 or h < 1:

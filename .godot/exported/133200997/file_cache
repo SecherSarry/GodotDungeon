@@ -1,9 +1,10 @@
 res://addons/TileMapDual/ghost_material.tres::c2ff3ce64964a2fddbdbf768a13add78::1788757978::res://.godot/exported/133200997/export-b09d823a04a4f3f02ec76e2f07487086-ghost_material.res
 res://tscns/Hero.tscn::2801f8b31d3b846fe2921f79cda1ef2e::1790836990::res://.godot/exported/133200997/export-8408976a0ff5042ad44e64b0120cdbb0-Hero.scn
-res://tscns/Item.tscn::ba00dc12ff2bc4bd603a30dfb17b856c::1790840649::res://.godot/exported/133200997/export-f98ecee501e2eb7b8ff78811604e59b8-Item.scn
-res://tscns/Mob.tscn::f5330e52dbbbc3d0fbeef3b49cf4c62f::1790825894::res://.godot/exported/133200997/export-3af588608d7b1995d88d7a6ad7d0cbe9-Mob.scn
+res://tscns/Item.tscn::19f7da79e573b4a421659f601900a5fc::1791203238::res://.godot/exported/133200997/export-f98ecee501e2eb7b8ff78811604e59b8-Item.scn
+res://tscns/Mob.tscn::fbdca7f196ad266c4625002a315a3d35::1791202201::res://.godot/exported/133200997/export-3af588608d7b1995d88d7a6ad7d0cbe9-Mob.scn
 res://scripts/actors/mobs/rat/Rat.tscn::6b129cd609bbff93fc3fd230770b1821::1790826308::res://.godot/exported/133200997/export-f3115b40c0706fa434aed5862389b270-Rat.scn
-res://scripts/scenes/GameScene/GameScene.tscn::763ffa7bb7c22dc5b46c04854772c237::1791026192::res://.godot/exported/133200997/export-bbf73a5217d32a80d335d6fb26168ac1-GameScene.scn
-res://assets/rat_frames.tres::4aba2d032de2bf1083ca617892977733::1791022819::res://.godot/exported/133200997/export-56b230d51940868b79d12c9b87f8a4ae-rat_frames.res
+res://scripts/scenes/GameScene/GameScene.tscn::763ffa7bb7c22dc5b46c04854772c237::1791205198::res://.godot/exported/133200997/export-bbf73a5217d32a80d335d6fb26168ac1-GameScene.scn
+res://assets/rat_frames.tres::4aba2d032de2bf1083ca617892977733::1791201662::res://.godot/exported/133200997/export-56b230d51940868b79d12c9b87f8a4ae-rat_frames.res
 res://tscns/TitleScene.tscn::9c152df674cc645b76854d90648a8bd1::1790828670::res://.godot/exported/133200997/export-5419949868b195419567cf3a2e01f2dd-TitleScene.scn
-res://ZTestBuff.tscn::b388606be3beb978df7cf9e23d3ef454::1791025744::res://.godot/exported/133200997/export-46509e34d982954ab3797467e0d86f64-ZTestBuff.scn
+res://assets/items.tres::c516a51910fe8faffc76ad62ceb929e8::1791203204::res://.godot/exported/133200997/export-d0b4c040ad58aabd928accbd4004b4f9-items.res
+res://tscns/Heap.tscn::ded82f3c8458de47d71f793dff8789c9::1791203452::res://.godot/exported/133200997/export-1b076948ac50449750f411e6fb1af4c8-Heap.scn

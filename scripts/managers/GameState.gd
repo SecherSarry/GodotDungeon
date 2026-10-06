@@ -3,6 +3,9 @@ extends Node
 # 一局的编排者，也是存档的真相源。hero 是数据（Resource），表现节点由 GameScene.render_hero 另建。
 # 本类只碰数据：清场、建英雄、读档、生成/载入楼层，节点一概不碰（manager 只做纯数据）。
 #
+# 一局的主种子（真相源，随存档持久化）。新局由 new_game() 掷一次；读档由 deserialize() 从存档还原。
+# 注意 _reset_run() 刻意不碰它——reset 是"新局/读档"共用的清场，若在这里重掷会把刚读回来的种子冲掉。
+var seed: int
 # 两个开局入口互斥，由 TitleScene 二选一调用：
 #   new_game()      —— 新档：清 → 新英雄 → init → 生成第 1 层
 #   load_game(slot) —— 读取：清 → 新英雄 → 读档 → 载入该层
@@ -12,6 +15,7 @@ var depth: int = 1
 var branch: int = 0
 var gold: int = 0
 var energy: int = 0
+
 
 # 开一局前的共同清场：背包 / 调度队列 / 层数据 / 上一局的残留计数，然后换一个新英雄。
 # 次序要点：清背包必须早于建英雄——init_hero 会把初始物品 collect 进包（HeroClass.gd:22-41），反了会被清光。
@@ -31,6 +35,8 @@ func _reset_run() -> void:
 # 新英雄的属性 / 初始装备 / 初始背包 / 全 0 天赋树 / Regeneration·Hunger 全由 hero.init() 建。
 func new_game() -> void:
 	_reset_run()
+	# 开局先定主种子，再生成第 1 层；否则每局 seed 恒为 0，世界千篇一律（load_game 的那条路不走这里）。
+	seed = SeedManager.new_seed()
 	GameState.init_anonymous_names()
 	hero.init()
 	LevelManager.generate_level(depth)
@@ -93,6 +99,7 @@ static func init_anonymous_names():
 
 func serialize() -> Dictionary:
 	var data = {
+		"seed": seed,
 		"hero": hero.serialize(),
 		"depth": depth,
 		"branch": branch,
@@ -107,6 +114,7 @@ func deserialize(data: Dictionary):
 	if(data.get("hero") != null):
 		hero.deserialize(data.get("hero"))
 	# JSON 数字读回来是 float，下列字段全线按 int 用，故 int() 归一。
+	seed = int(data.get("seed", 0))
 	depth = int(data.get("depth", 1))
 	branch = int(data.get("branch", 0))
 	gold = int(data.get("gold", 0))

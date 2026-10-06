@@ -55,12 +55,14 @@ func refresh():
 	for item in game_scene.hero.backpack.items:
 		var idx: int = item_list.add_item(_label(item))
 		item_list.set_item_custom_fg_color(idx, _color(item))
+		item_list.set_item_icon(idx, item.image if item != null else null)
 
 	belongings_list.clear()
 	var slots: Array = game_scene.hero.belongings.slots()
 	for i in slots.size():
 		var idx: int = belongings_list.add_item(_label(slots[i], i))
 		belongings_list.set_item_custom_fg_color(idx, _color(slots[i]))
+		belongings_list.set_item_icon(idx, slots[i].image if slots[i] != null else null)
 
 	_reset_selection()
 
